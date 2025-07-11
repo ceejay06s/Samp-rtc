@@ -22,6 +22,13 @@ export const config = {
     analytics: process.env.EXPO_PUBLIC_ENABLE_ANALYTICS === 'true',
     crashReporting: process.env.EXPO_PUBLIC_ENABLE_CRASH_REPORTING === 'true',
   },
+
+  // GitHub OAuth
+  github: {
+    clientId: process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID || '',
+    clientSecret: process.env.EXPO_PUBLIC_GITHUB_CLIENT_SECRET || '',
+    redirectUri: 'samp-rtc://localhost:3000/auth/callback',
+  },
 } as const
 
 // Validation function to ensure required env vars are set
