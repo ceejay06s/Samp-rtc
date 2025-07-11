@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { Platform, StyleSheet } from 'react-native';
 
+import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import ConfigExample from '@/components/ConfigExample';
 import { HelloWave } from '@/components/HelloWave';
 import OAuthLogin from '@/components/OAuthLogin';
@@ -26,6 +27,11 @@ export default function HomeScreen() {
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Environment Configuration</ThemedText>
         <ConfigExample />
+      </ThemedView>
+      
+      <ThemedView style={styles.stepContainer}>
+        <ThemedText type="subtitle">Analytics Dashboard</ThemedText>
+        <AnalyticsDashboard />
       </ThemedView>
       
       <ThemedView style={styles.stepContainer}>
