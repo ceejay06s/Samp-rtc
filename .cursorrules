@@ -1,0 +1,180 @@
+# Dating App Development Rules
+
+## Project Overview
+This is a React Native dating app built with Expo, using Supabase as the backend. The app features match levels, voice calls, interest-based matching, and cross-platform support.
+
+## Core Architecture Principles
+
+### 1. Simple and Elegant Design
+- Use clean, minimal UI components with consistent spacing
+- Follow the existing theme system in `src/utils/themes/`
+- Implement smooth animations and transitions
+- Use the established color palette and typography from the theme files
+- Keep components focused and single-purpose
+
+### 2. Structured Code Organization
+- Follow the existing folder structure:
+  - `src/components/` - Reusable UI components
+  - `src/services/` - API and external service integrations
+  - `src/hooks/` - Custom React hooks
+  - `src/types/` - TypeScript type definitions
+  - `src/utils/` - Utility functions and helpers
+- Use TypeScript for all new code
+- Maintain consistent naming conventions (camelCase for variables, PascalCase for components)
+- Keep files under 300 lines when possible
+
+### 3. Match Level System
+- Implement progressive match levels (1-4) with increasing features
+- Level 1: Basic messaging
+- Level 2: Photo sharing
+- Level 3: Voice messages
+- Level 4: Voice calls
+- Store match levels in Supabase with user interaction tracking
+- Use the existing `Match` interface and extend it for level functionality
+
+### 4. Matchmaking Algorithm
+- Base matching on: interests, age range, location, hobbies
+- Use Supabase's full-text search and geolocation features
+- Implement preference settings in user profiles
+- Support for multiple gender preferences and non-binary options
+- Consider compatibility scores based on shared interests
+
+### 5. Cross-Platform Responsiveness
+- Use Expo's responsive utilities from `src/utils/responsive.ts`
+- Test on iOS, Android, and Web platforms
+- Implement adaptive layouts for different screen sizes
+- Use the existing responsive spacing system
+- Ensure touch targets are at least 44px on mobile
+
+### 6. Supabase Integration
+- Use the existing Supabase client from `src/services/supabase.ts`
+- Follow the established authentication patterns in `src/services/auth.ts`
+- Implement real-time features using Supabase subscriptions
+- Use Row Level Security (RLS) for data protection
+- Store user data, matches, messages, and preferences in Supabase
+
+## Code Style Guidelines
+
+### React Native / Expo Specific
+- Use Expo Router for navigation (already configured)
+- Leverage Expo's built-in components when possible
+- Use `expo-av` for voice/video call features
+- Implement proper error boundaries and loading states
+- Use React Native's performance optimization techniques
+
+### Component Structure
+```typescript
+// Follow this pattern for new components
+import React from 'react';
+import { View, Text } from 'react-native';
+import { useTheme } from '../utils/themes';
+
+interface ComponentProps {
+  // Define props with proper types
+}
+
+export const Component: React.FC<ComponentProps> = ({ prop1, prop2 }) => {
+  const theme = useTheme();
+  
+  return (
+    <View style={[theme.spacing.padding.md, theme.colors.background]}>
+      {/* Component content */}
+    </View>
+  );
+};
+```
+
+### State Management
+- Use React Context for global state (follow `AuthContext` pattern)
+- Use local state for component-specific data
+- Implement proper loading and error states
+- Use the existing `useAuth` hook pattern for authentication
+
+### API Integration
+- Create service functions in `src/services/` directory
+- Use TypeScript interfaces for all API responses
+- Implement proper error handling and retry logic
+- Use the existing `ApiResponse<T>` type for consistency
+
+## Feature Implementation Priorities
+
+### High Priority
+1. User authentication and profile management
+2. Match discovery and swiping interface
+3. Basic messaging system
+4. Match level progression system
+5. Voice call integration (using expo-av)
+
+### Medium Priority
+1. Advanced matching algorithms
+2. Push notifications
+3. Analytics and user behavior tracking
+4. Premium features and subscriptions
+5. Enhanced voice call features
+
+### Low Priority
+1. Social media integration
+2. Advanced filters and search
+3. Gamification elements
+4. AI-powered recommendations
+
+## Database Schema Guidelines
+
+### Supabase Tables
+- `users` - Core user information
+- `profiles` - Extended user profile data
+- `matches` - Match relationships with levels
+- `conversations` - Chat conversations
+- `messages` - Individual messages
+- `user_interests` - User interests and hobbies
+- `match_levels` - Level progression tracking
+- `voice_calls` - Call history and settings
+
+### Security Rules
+- Implement Row Level Security (RLS) on all tables
+- Users can only access their own data and matched users' public data
+- Validate all inputs on both client and server side
+- Use Supabase's built-in authentication features
+
+## Performance Considerations
+- Implement lazy loading for images and content
+- Use React Native's FlatList for large datasets
+- Optimize bundle size by tree-shaking unused imports
+- Implement proper caching strategies
+- Use React.memo and useMemo for expensive computations
+
+## Testing Guidelines
+- Write unit tests for utility functions
+- Test component rendering and interactions
+- Mock Supabase calls in tests
+- Test cross-platform compatibility
+- Implement integration tests for critical user flows
+
+## Deployment and CI/CD
+- Use Expo's build system for app store deployments
+- Configure environment variables properly
+- Implement proper staging and production environments
+- Use Expo's over-the-air updates for quick fixes
+
+## Accessibility
+- Implement proper accessibility labels
+- Support screen readers
+- Ensure sufficient color contrast
+- Provide alternative text for images
+- Support different text sizes
+
+## Security Best Practices
+- Never store sensitive data in client-side storage
+- Use HTTPS for all API communications
+- Implement proper input validation
+- Use Supabase's built-in security features
+- Regularly update dependencies
+
+## Documentation
+- Document all API endpoints and their expected responses
+- Maintain up-to-date README files
+- Document complex business logic
+- Provide setup instructions for new developers
+- Keep architecture decisions documented
+
+Remember: Always prioritize user experience, maintain code quality, and follow the established patterns in the codebase. When in doubt, refer to existing implementations for consistency. 

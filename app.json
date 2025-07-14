@@ -10,7 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.samp-rtc"
+      "bundleIdentifier": "com.yourcompany.samp-rtc",
+      "infoPlist": {
+        "UIViewControllerBasedStatusBarAppearance": false,
+        "UIStatusBarHidden": false,
+        "UIStatusBarStyle": "UIStatusBarStyleDefault",
+        "UIStatusBarAnimation": "UIStatusBarAnimationSlide",
+        "NSCameraUsageDescription": "This app needs access to camera to take profile photos.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select profile photos."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +26,15 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.christianbalais06.Samprtc"
+      "package": "com.christianbalais06.Samprtc",
+      "androidNavigationBar": {
+        "visible": "immersive"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -34,6 +50,20 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share them with your friends.",
+          "cameraPermission": "The app accesses your camera to let you take photos for your profile."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "The app accesses your photos to let you select profile pictures.",
+          "savePhotosPermission": "The app saves photos to your photo library."
         }
       ]
     ],
