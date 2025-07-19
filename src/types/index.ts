@@ -1,6 +1,7 @@
 export interface Theme {
   colors: {
     primary: string;
+    onPrimary: string;
     secondary: string;
     accent: string;
     background: string;
@@ -12,6 +13,7 @@ export interface Theme {
     error: string;
     success: string;
     warning: string;
+    disabled: string;
     heart: string;
     star: string;
     sparkle: string;
@@ -193,12 +195,19 @@ export enum MatchLevel {
 // Message related types
 export interface Message {
   id: string;
-  conversationId: string;
-  senderId: string;
+  conversation_id: string; // Database field name
+  sender_id: string; // Database field name
   content: string;
-  type: 'text' | 'image' | 'voice' | 'location';
-  timestamp: Date;
-  read: boolean;
+  message_type: string; // Database field name
+  is_read: boolean; // Database field name
+  created_at: string; // Database field name
+  type?: string; // Message type for UI
+  // Additional fields for convenience
+  conversationId?: string; // Alias for conversation_id
+  senderId?: string; // Alias for sender_id
+  messageType?: string; // Alias for message_type
+  timestamp?: Date; // Alias for created_at
+  read?: boolean; // Alias for is_read
 }
 
 // Message types enum
@@ -212,12 +221,21 @@ export enum MessageType {
 // Conversation related types
 export interface Conversation {
   id: string;
-  matchId: string;
-  participants: string[];
-  lastMessage?: Message;
-  unreadCount: number;
-  createdAt: Date;
-  updatedAt: Date;
+  match_id: string; // Database field name
+  last_message_id?: string; // Database field name
+  unread_count?: number; // Database field name
+  created_at: string; // Database field name
+  updated_at: string; // Database field name
+  // Additional fields for convenience
+  matchId?: string; // Alias for match_id
+  lastMessageId?: string; // Alias for last_message_id
+  unreadCount?: number; // Alias for unread_count
+  createdAt?: Date; // Alias for created_at
+  updatedAt?: Date; // Alias for updated_at
+  participants?: string[]; // Computed field
+  lastMessage?: Message; // Populated field
+  otherProfile?: Profile; // Populated field
+  match?: Match; // Populated field
 }
 
 // Voice call related types
@@ -230,6 +248,151 @@ export interface VoiceCall {
   startTime?: Date;
   endTime?: Date;
   duration?: number;
+  // Database compatibility fields
+  match_id?: string;
+  caller_id?: string;
+  receiver_id?: string;
+  start_time?: string;
+  end_time?: string;
+}
+
+// RTP and WebRTC related types
+export enum CallStatus {
+  INITIATED = 'initiated',
+  RINGING = 'ringing',
+  CONNECTED = 'connected',
+  ENDED = 'ended',
+  MISSED = 'missed',
+  REJECTED = 'rejected',
+}
+
+export enum CallType {
+  VOICE = 'voice',
+  VIDEO = 'video',
+}
+
+export interface RTPCall {
+  id: string;
+  match_id: string;
+  caller_id: string;
+  receiver_id: string;
+  call_type: CallType;
+  status: CallStatus;
+  start_time?: string;
+  end_time?: string;
+  duration?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RTPConnection {
+  id: string;
+  call_id: string;
+  user_id: string;
+  peer_connection_id: string;
+  local_sdp?: string;
+  remote_sdp?: string;
+  ice_candidates: RTPIceCandidate[];
+  is_connected: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RTPIceCandidate {
+  id: string;
+  connection_id: string;
+  candidate: string;
+  sdp_mid?: string;
+  sdp_mline_index?: number;
+  created_at: string;
+}
+
+export interface RTPOffer {
+  id: string;
+  call_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  sdp: string;
+  type: 'offer' | 'answer';
+  created_at: string;
+}
+
+export interface RTPMediaStream {
+  id: string;
+  user_id: string;
+  stream_type: 'audio' | 'video' | 'both';
+  is_local: boolean;
+  is_enabled: boolean;
+  created_at: string;
+}
+
+export interface RTPCallStats {
+  total_calls: number;
+  total_duration: number;
+  average_duration: number;
+  missed_calls: number;
+  successful_calls: number;
+  call_quality_rating: number;
+}
+
+export interface RTPCallQuality {
+  call_id: string;
+  user_id: string;
+  audio_level: number;
+  video_quality?: number;
+  network_latency: number;
+  packet_loss: number;
+  jitter: number;
+  timestamp: string;
+}
+
+// Enhanced VoiceCall interface for database compatibility
+export interface VoiceCallDB {
+  id: string;
+  match_id: string;
+  caller_id: string;
+  receiver_id: string;
+  status: CallStatus;
+  start_time?: string;
+  end_time?: string;
+  duration?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Post related types
+export interface Post {
+  id: string;
+  user_id: string;
+  content: string;
+  images: string[];
+  tags?: string[];
+  location?: string;
+  likes_count: number;
+  comments_count: number;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  // Populated fields
+  user_profile?: Profile;
+  liked_by_current_user?: boolean;
+}
+
+export interface PostComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  user_profile?: Profile;
+}
+
+export interface PostLike {
+  id: string;
+  post_id: string;
+  user_id: string;
+  created_at: string;
 }
 
 // API response types

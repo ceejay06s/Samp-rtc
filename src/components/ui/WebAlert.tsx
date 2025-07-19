@@ -1,5 +1,4 @@
-import { Alert } from 'react-native';
-import { usePlatform } from '../../hooks/usePlatform';
+import { Alert, Platform } from 'react-native';
 
 interface AlertButton {
   text: string;
@@ -13,6 +12,11 @@ interface WebAlertOptions {
   buttons?: AlertButton[];
   cancelable?: boolean;
 }
+
+// Helper function to detect if we're on web
+const isWebPlatform = (): boolean => {
+  return typeof window !== 'undefined' && window.navigator && Platform.OS === 'web';
+};
 
 // Web-compatible alert implementation
 const showWebAlert = (options: WebAlertOptions): void => {
@@ -168,9 +172,7 @@ export const WebAlert = {
     buttons?: AlertButton[],
     type?: string
   ): void => {
-    const { isWeb } = usePlatform();
-
-    if (isWeb) {
+    if (isWebPlatform()) {
       showWebAlert({
         title,
         message,

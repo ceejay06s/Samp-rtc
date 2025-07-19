@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { DatePicker } from '../src/components/ui/DatePicker';
+import { GenderSelector } from '../src/components/ui/GenderSelector';
 import { Input } from '../src/components/ui/Input';
 import { PhotoGallery } from '../src/components/ui/PhotoGallery';
 import { RangeSlider } from '../src/components/ui/RangeSlider';
+import { SingleSlider } from '../src/components/ui/Slider';
 import { WebAlert } from '../src/components/ui/WebAlert';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { AuthService } from '../src/services/auth';
@@ -20,7 +22,7 @@ import { useTheme } from '../src/utils/themes';
 export default function ProfileScreen() {
   const theme = useTheme();
   const { isWeb } = usePlatform();
-  const { user } = useAuth();
+  const { user, profile: currentProfile, loading: authLoading, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -35,7 +37,7 @@ export default function ProfileScreen() {
   const [location, setLocation] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
   const [lookingFor, setLookingFor] = useState<string[]>([]);
-  const [maxDistance, setMaxDistance] = useState('50');
+  const [maxDistance, setMaxDistance] = useState(50);
   const [minAge, setMinAge] = useState(18);
   const [maxAge, setMaxAge] = useState(100);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -44,7 +46,6 @@ export default function ProfileScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Predefined options
-  const genderOptions = ['male', 'female', 'non-binary', 'other'];
   const interestOptions = [
     'travel', 'music', 'sports', 'cooking', 'reading', 'gaming',
     'photography', 'art', 'dancing', 'hiking', 'coffee', 'wine',
@@ -61,32 +62,31 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    if (user) {
+    if (!authLoading && currentProfile) {
       loadProfile();
     }
-  }, [user]);
+  }, [currentProfile, authLoading]);
 
   const loadProfile = async () => {
-    if (!user) return;
+    if (!currentProfile) return;
     
     try {
       setLoading(true);
-      const currentUser = await AuthService.getCurrentUser();
-      if (currentUser?.profile) {
-        setProfile(currentUser.profile);
-        setFirstName(currentUser.profile.first_name || '');
-        setLastName(currentUser.profile.last_name || '');
-        setBirthdate(currentUser.profile.birthdate ? new Date(currentUser.profile.birthdate + 'T00:00:00') : undefined);
-        setGender(currentUser.profile.gender || '');
-        setBio(currentUser.profile.bio || '');
-        setLocation(currentUser.profile.location || '');
-        setInterests(currentUser.profile.interests || []);
-        setLookingFor(currentUser.profile.looking_for || []);
-        setMaxDistance(currentUser.profile.max_distance?.toString() || '50');
-        setMinAge(currentUser.profile.min_age || 18);
-        setMaxAge(currentUser.profile.max_age || 100);
-        setPhotos(currentUser.profile.photos || []);
-      }
+      console.log('Loading profile from context:', currentProfile);
+      setProfile(currentProfile);
+      setFirstName(currentProfile.first_name || '');
+      setLastName(currentProfile.last_name || '');
+      setBirthdate(currentProfile.birthdate ? new Date(currentProfile.birthdate + 'T00:00:00') : undefined);
+      setGender(currentProfile.gender || '');
+      console.log('Loaded gender:', currentProfile.gender);
+      setBio(currentProfile.bio || '');
+      setLocation(currentProfile.location || '');
+      setInterests(currentProfile.interests || []);
+      setLookingFor(currentProfile.looking_for || []);
+      setMaxDistance(currentProfile.max_distance || 50);
+      setMinAge(currentProfile.min_age || 18);
+      setMaxAge(currentProfile.max_age || 100);
+      setPhotos(currentProfile.photos || []);
     } catch (error) {
       console.error('Failed to load profile:', error);
       showAlert('Error', 'Failed to load profile. Please try again.');
@@ -123,8 +123,7 @@ export default function ProfileScreen() {
       newErrors.bio = 'Bio must be less than 500 characters';
     }
 
-    const maxDistanceNum = parseInt(maxDistance);
-    if (isNaN(maxDistanceNum) || maxDistanceNum < 1 || maxDistanceNum > 100) {
+    if (maxDistance < 1 || maxDistance > 100) {
       newErrors.maxDistance = 'Max distance must be between 1 and 100 miles';
     }
 
@@ -148,21 +147,29 @@ export default function ProfileScreen() {
     try {
       setSaving(true);
       
-      await AuthService.updateProfile(user.id, {
+      console.log('Saving profile with gender:', gender);
+      
+      const updateData = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         birthdate: birthdate ? formatDateToISO(birthdate) : undefined,
+        gender: gender,
         bio: bio.trim(),
         location: location.trim(),
         interests,
         looking_for: lookingFor,
-        max_distance: parseInt(maxDistance),
+        max_distance: maxDistance,
         min_age: minAge,
         max_age: maxAge,
         photos,
-      });
+      };
+      
+      console.log('Update data:', updateData);
+      
+      await AuthService.updateProfile(user.id, updateData);
 
       showAlert('Success', 'Profile updated successfully!');
+      await refreshProfile(); // Refresh profile in context
       await loadProfile(); // Reload profile to get updated data
     } catch (error) {
       console.error('Failed to update profile:', error);
@@ -173,11 +180,19 @@ export default function ProfileScreen() {
   };
 
   const toggleInterest = (interest: string) => {
-    setInterests(prev => 
-      prev.includes(interest) 
-        ? prev.filter(i => i !== interest)
-        : [...prev, interest]
-    );
+    setInterests(prev => {
+      if (prev.includes(interest)) {
+        // Remove interest if already selected
+        return prev.filter(i => i !== interest);
+      } else {
+        // Add interest only if under the limit
+        if (prev.length >= 7) {
+          showAlert('Interest Limit', 'You can only select up to 7 interests. Please remove one before adding another.');
+          return prev;
+        }
+        return [...prev, interest];
+      }
+    });
   };
 
   const toggleLookingFor = (gender: string) => {
@@ -403,16 +418,33 @@ export default function ProfileScreen() {
   };
 
   const handleAgeRangeChange = (min: number, max: number) => {
+    console.log('Age range changed:', { min, max, currentMin: minAge, currentMax: maxAge });
     setMinAge(min);
     setMaxAge(max);
   };
 
+  if (authLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+            Loading your profile...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-          Loading profile...
-        </Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+            Loading profile...
+          </Text>
+        </View>
       </View>
     );
   }
@@ -468,36 +500,16 @@ export default function ProfileScreen() {
             error={errors.birthdate}
           />
 
-          <View style={styles.genderContainer}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Gender</Text>
-            <View style={styles.genderOptions}>
-              {genderOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.genderOption,
-                    {
-                      backgroundColor: gender === option ? theme.colors.primary : theme.colors.surface,
-                      borderColor: theme.colors.border,
-                    }
-                  ]}
-                  onPress={() => setGender(option)}
-                >
-                  <Text style={[
-                    styles.genderOptionText,
-                    { color: gender === option ? 'white' : theme.colors.text }
-                  ]}>
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {errors.gender && (
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                {errors.gender}
-              </Text>
-            )}
-          </View>
+          <GenderSelector
+            value={gender}
+            onValueChange={(newGender) => {
+              console.log('Gender changed from', gender, 'to', newGender);
+              setGender(newGender);
+            }}
+            error={errors.gender}
+            label="Gender"
+            type="gender"
+          />
         </Card>
 
         {/* Bio */}
@@ -555,7 +567,12 @@ export default function ProfileScreen() {
 
         {/* Interests */}
         <Card style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Interests</Text>
+          <View style={styles.interestsHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Interests</Text>
+            <Text style={[styles.interestCounter, { color: theme.colors.textSecondary }]}>
+              {interests.length}/7
+            </Text>
+          </View>
           <View style={styles.interestsContainer}>
             {interestOptions.map(interest => (
               <TouchableOpacity
@@ -565,9 +582,11 @@ export default function ProfileScreen() {
                   {
                     backgroundColor: interests.includes(interest) ? theme.colors.primary : theme.colors.surface,
                     borderColor: theme.colors.border,
+                    opacity: !interests.includes(interest) && interests.length >= 7 ? 0.5 : 1,
                   }
                 ]}
                 onPress={() => toggleInterest(interest)}
+                disabled={!interests.includes(interest) && interests.length >= 7}
               >
                 <Text style={[
                   styles.interestText,
@@ -578,6 +597,11 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          {interests.length >= 7 && (
+            <Text style={[styles.interestLimitText, { color: theme.colors.textSecondary }]}>
+              Maximum 7 interests selected. Remove one to add another.
+            </Text>
+          )}
         </Card>
 
         {/* Preferences */}
@@ -586,56 +610,68 @@ export default function ProfileScreen() {
           
           <View style={styles.preferenceRow}>
             <Text style={[styles.label, { color: theme.colors.text }]}>Looking for</Text>
-            <View style={styles.lookingForOptions}>
-              {genderOptions.map(option => (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.lookingForOption,
-                    {
-                      backgroundColor: lookingFor.includes(option) ? theme.colors.primary : theme.colors.surface,
-                      borderColor: theme.colors.border,
-                    }
-                  ]}
-                  onPress={() => toggleLookingFor(option)}
-                >
-                  <Text style={[
-                    styles.lookingForOptionText,
-                    { color: lookingFor.includes(option) ? 'white' : theme.colors.text }
-                  ]}>
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <GenderSelector
+              value={''}
+              onValueChange={() => {}}
+              multiple
+              selectedValues={lookingFor}
+              onValuesChange={setLookingFor}
+              label={''}
+              type="preference"
+            />
           </View>
 
           <View style={styles.preferenceRow}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Max Distance</Text>
-            <Input
-              placeholder="50"
+            <View style={styles.sliderHeader}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Max Distance</Text>
+              <Text style={[styles.ageRangeText, { color: theme.colors.text }]}>
+                {maxDistance} miles
+              </Text>
+            </View>
+            <SingleSlider
               value={maxDistance}
-              onChangeText={setMaxDistance}
-              keyboardType="numeric"
-              error={errors.maxDistance}
+              onValueChange={(value) => setMaxDistance(value)}
+              minValue={1}
+              maxValue={100}
+              step={1}
+              showValue={false}
             />
-            <Text style={[styles.unit, { color: theme.colors.textSecondary }]}>miles</Text>
+            <View style={styles.sliderIndicators}>
+              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
+                1 mile
+              </Text>
+              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
+                100 miles
+              </Text>
+            </View>
           </View>
 
           <View style={styles.ageRangeRow}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Age Range</Text>
+            <View style={styles.sliderHeader}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Age Range</Text>
+              <Text style={[styles.ageRangeText, { color: theme.colors.text }]}>
+                {minAge} - {maxAge} years
+              </Text>
+            </View>
+            
             <RangeSlider
               minValue={minAge}
               maxValue={maxAge}
               onValueChange={handleAgeRangeChange}
+              minRange={18}
+              maxRange={100}
               step={1}
-              showValues={true}
+              showValues={false}
+              disabled={saving}
             />
-            {(errors.minAge || errors.maxAge) && (
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                {errors.minAge || errors.maxAge}
+            <View style={styles.sliderIndicators}>
+              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
+                18 years
               </Text>
-            )}
+              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
+                100 years
+              </Text>
+            </View>
           </View>
         </Card>
 
@@ -678,6 +714,11 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFontSize('lg'),
     textAlign: 'center',
     marginTop: 200,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   section: {
     marginBottom: getResponsiveSpacing('lg'),
@@ -723,6 +764,16 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: getResponsiveSpacing('xs'),
   },
+  interestsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  interestCounter: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+  },
   interestsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -737,6 +788,12 @@ const styles = StyleSheet.create({
   interestText: {
     fontSize: getResponsiveFontSize('sm'),
     fontWeight: '600',
+  },
+  interestLimitText: {
+    fontSize: getResponsiveFontSize('sm'),
+    textAlign: 'center',
+    marginTop: getResponsiveSpacing('sm'),
+    fontStyle: 'italic',
   },
   preferenceRow: {
     marginBottom: getResponsiveSpacing('md'),
@@ -768,6 +825,11 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFontSize('xs'),
     marginTop: getResponsiveSpacing('xs'),
   },
+  debugText: {
+    fontSize: getResponsiveFontSize('xs'),
+    marginTop: getResponsiveSpacing('xs'),
+    fontStyle: 'italic',
+  },
   saveButton: {
     marginTop: getResponsiveSpacing('lg'),
     marginBottom: getResponsiveSpacing('xl'),
@@ -783,5 +845,83 @@ const styles = StyleSheet.create({
   testButtonText: {
     fontSize: getResponsiveFontSize('sm'),
     fontWeight: '600',
+  },
+  nativeAgeSlider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: getResponsiveSpacing('sm'),
+  },
+  ageSliderStyle: {
+    flex: 1,
+    height: 40,
+    marginHorizontal: getResponsiveSpacing('sm'),
+  },
+  ageValueContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+  },
+  ageValueText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+  },
+  description: {
+    fontSize: getResponsiveFontSize('sm'),
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  ageRangeDisplay: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+  },
+  ageValue: {
+    alignItems: 'center',
+  },
+  ageLabel: {
+    fontSize: getResponsiveFontSize('xs'),
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  ageControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: 100,
+  },
+  ageButton: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('xs'),
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  ageButtonText: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: 'bold',
+  },
+  ageNumber: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: 'bold',
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  ageRangeText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+  },
+  sliderIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+  },
+  sliderMinMax: {
+    fontSize: getResponsiveFontSize('xs'),
   },
 }); 

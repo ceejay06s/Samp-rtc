@@ -41,6 +41,7 @@ function RootLayoutContent() {
             <Stack.Screen name="privacy" />
             <Stack.Screen name="menu" />
             <Stack.Screen name="preferences" />
+            <Stack.Screen name="user-profile" />
           </Stack>
           
           {/* Mobile Toolbar - show on mobile devices and mobile browsers only when logged in */}

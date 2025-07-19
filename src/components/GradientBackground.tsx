@@ -19,7 +19,7 @@ export const GradientBackground: React.FC<GradientBackgroundProps> = ({
   end = { x: 1, y: 1 },
 }) => {
   const theme = useTheme();
-  const colors = theme.colors.gradient[gradient];
+  const colors = theme.colors.gradient[gradient] as [string, string];
 
   return (
     <LinearGradient

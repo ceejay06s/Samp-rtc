@@ -3,6 +3,7 @@ import { Theme } from '../types';
 export const lightTheme: Theme = {
   colors: {
     primary: '#FF2E63', // Vibrant hot pink
+    onPrimary: '#FFFFFF', // Text/icons on primary
     secondary: '#08D9D6', // Electric cyan
     accent: '#FF9A56', // Vibrant orange
     background: '#FFFFFF',
@@ -14,6 +15,7 @@ export const lightTheme: Theme = {
     error: '#EF4444', // Bright red
     success: '#10B981', // Emerald green
     warning: '#F59E0B', // Amber
+    disabled: '#CCCCCC', // Grey for disabled elements
     // Dating app specific colors
     heart: '#FF2E63', // Hot pink for hearts
     star: '#FFD700', // Gold for stars
@@ -119,6 +121,7 @@ export const lightTheme: Theme = {
 export const darkTheme: Theme = {
   colors: {
     primary: '#FF2E63', // Keep vibrant hot pink
+    onPrimary: '#FFFFFF', // Text/icons on primary
     secondary: '#08D9D6', // Keep electric cyan
     accent: '#FF9A56', // Keep vibrant orange
     background: '#0F0F23', // Deep dark background
@@ -130,6 +133,7 @@ export const darkTheme: Theme = {
     error: '#EF4444',
     success: '#10B981',
     warning: '#F59E0B',
+    disabled: '#4A4A6A', // Darker grey for disabled elements
     // Dating app specific colors
     heart: '#FF2E63',
     star: '#FFD700',

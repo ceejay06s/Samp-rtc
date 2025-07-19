@@ -20,6 +20,7 @@ export interface ProfileUpdateData {
   first_name?: string;
   last_name?: string;
   birthdate?: string;
+  gender?: string;
   bio?: string;
   location?: string;
   interests?: string[];
@@ -147,10 +148,35 @@ export class AuthService {
         }
       }
 
-      // Method 4: Use sync function as last resort
+      // Method 4: Use force_create_profile_birthdate as backup
       if (!profileData) {
         try {
-          console.log('Method 4: Using sync_missing_profiles function...');
+          console.log('Method 4: Using force_create_profile_birthdate function...');
+          
+          const { data: forceData, error: forceError } = await supabase
+            .rpc('force_create_profile_birthdate', {
+              p_user_id: authData.user.id,
+              p_first_name: data.firstName,
+              p_last_name: data.lastName,
+              p_birthdate: data.birthdate,
+              p_gender: data.gender,
+            });
+
+          if (!forceError && forceData) {
+            profileData = forceData;
+            console.log('Profile created with force function successfully');
+          } else {
+            console.error('Force function error:', forceError);
+          }
+        } catch (error) {
+          console.log('Method 4 failed:', error);
+        }
+      }
+
+      // Method 5: Use sync function as last resort
+      if (!profileData) {
+        try {
+          console.log('Method 5: Using sync_missing_profiles function...');
           
           const { data: syncResult, error: syncError } = await supabase
             .rpc('sync_missing_profiles');
@@ -187,11 +213,11 @@ export class AuthService {
             console.error('Sync function error:', syncError);
             // If function doesn't exist, just log and continue
             if (syncError.message?.includes('Could not find the function')) {
-              console.log('Sync function does not exist, skipping Method 4');
+              console.log('Sync function does not exist, skipping Method 5');
             }
           }
         } catch (error) {
-          console.log('Method 4 failed:', error);
+          console.log('Method 5 failed:', error);
         }
       }
 
@@ -296,13 +322,73 @@ export class AuthService {
         throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
       }
 
-      // Prepare the update data
+      // First, check if profile exists
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle(); // Use maybeSingle() to avoid error if no rows found
+
+      if (checkError) {
+        console.error('Error checking existing profile:', checkError);
+        throw checkError;
+      }
+
+      // If profile doesn't exist, create it first
+      if (!existingProfile) {
+        console.log('Profile does not exist, creating new profile for user:', userId);
+        
+        // Get user info for creating profile
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData.user) {
+          throw new Error('Could not get user information');
+        }
+
+        // Create a new profile with default values and provided data
+        const createData = {
+          user_id: userId,
+          first_name: data.first_name || 'User',
+          last_name: data.last_name || '',
+          birthdate: data.birthdate || '1990-01-01',
+          gender: data.gender || 'Other',
+          bio: data.bio || '',
+          location: data.location || '',
+          photos: data.photos || [],
+          interests: data.interests || [],
+          looking_for: data.looking_for || ['male', 'female'],
+          max_distance: data.max_distance || 50,
+          min_age: data.min_age || 18,
+          max_age: data.max_age || 100,
+          is_online: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        console.log('Creating new profile with data:', createData);
+
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert(createData)
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating new profile:', createError);
+          throw createError;
+        }
+
+        console.log('New profile created successfully:', newProfile);
+        return newProfile;
+      }
+
+      // Profile exists, proceed with update
       const updateData: any = {};
 
       // Only include fields that are provided
       if (data.first_name !== undefined) updateData.first_name = data.first_name;
       if (data.last_name !== undefined) updateData.last_name = data.last_name;
       if (data.birthdate !== undefined) updateData.birthdate = data.birthdate;
+      if (data.gender !== undefined) updateData.gender = data.gender;
       if (data.bio !== undefined) updateData.bio = data.bio;
       if (data.location !== undefined) updateData.location = data.location;
       if (data.interests !== undefined) updateData.interests = data.interests;
@@ -317,7 +403,7 @@ export class AuthService {
 
       console.log('Final update data:', updateData);
 
-      // Update the profile in Supabase
+      // Update the existing profile
       const { data: profileData, error } = await supabase
         .from('profiles')
         .update(updateData)
@@ -478,5 +564,152 @@ export class AuthService {
         callback(null);
       }
     });
+  }
+
+  static async updateEmail(newEmail: string): Promise<void> {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Email update failed:', error);
+      throw new Error(`Email update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  static async updatePassword(newPassword: string): Promise<void> {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Password update failed:', error);
+      throw new Error(`Password update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  static async deleteAccount(): Promise<void> {
+    try {
+      // First, get the current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('No authenticated user found');
+      }
+
+      // Delete user profile from database
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (profileError) {
+        console.error('Profile deletion error:', profileError);
+        throw profileError;
+      }
+
+      // Sign out the user (actual account deletion would require server-side implementation)
+      await this.signOut();
+    } catch (error) {
+      console.error('Account deletion failed:', error);
+      throw new Error(`Account deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  static async getUserProfile(userId: string): Promise<Profile> {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle(); // Use maybeSingle to handle missing profiles gracefully
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        throw error;
+      }
+
+      if (!profile) {
+        console.log('Profile not found, creating default profile for user:', userId);
+        // Create a default profile if none exists
+        return await this.ensureProfileExists(userId);
+      }
+
+      return profile;
+    } catch (error) {
+      console.error('Failed to get user profile:', error);
+      throw new Error(`Failed to fetch user profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Helper method to ensure a profile exists for a user
+  static async ensureProfileExists(userId: string): Promise<Profile> {
+    try {
+      console.log('Ensuring profile exists for user:', userId);
+
+      // Check if profile already exists
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking for existing profile:', checkError);
+        throw checkError;
+      }
+
+      if (existingProfile) {
+        console.log('Profile already exists:', existingProfile);
+        return existingProfile;
+      }
+
+      // Create default profile
+      const defaultProfile = {
+        user_id: userId,
+        first_name: 'User',
+        last_name: '',
+        birthdate: '1990-01-01',
+        gender: 'Other',
+        bio: '',
+        location: '',
+        photos: [],
+        interests: [],
+        looking_for: ['male', 'female'],
+        max_distance: 50,
+        min_age: 18,
+        max_age: 100,
+        is_online: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      console.log('Creating default profile:', defaultProfile);
+
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert(defaultProfile)
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating default profile:', createError);
+        throw createError;
+      }
+
+      console.log('Default profile created successfully:', newProfile);
+      return newProfile;
+    } catch (error) {
+      console.error('Failed to ensure profile exists:', error);
+      throw new Error(`Failed to create profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 } 

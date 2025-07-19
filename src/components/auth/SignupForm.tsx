@@ -6,6 +6,7 @@ import { useTheme } from '../../utils/themes';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { DatePicker } from '../ui/DatePicker';
+import { GenderDropdown } from '../ui/GenderDropdown';
 import { Input } from '../ui/Input';
 
 interface SignupFormProps {
@@ -166,11 +167,12 @@ export const SignupForm: React.FC<SignupFormProps> = ({
             />
           </View>
           <View style={styles.detailInput}>
-            <Input
-              placeholder="Gender"
+            <GenderDropdown
               value={gender}
-              onChangeText={setGender}
+              onValueChange={setGender}
               error={errors.gender}
+              label=""
+              placeholder="Select your gender"
             />
           </View>
         </View>

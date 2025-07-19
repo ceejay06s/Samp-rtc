@@ -4,11 +4,13 @@ import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 're
 import { useAuth } from '../../../lib/AuthContext';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
+import { IconNames, MaterialIcon } from './MaterialIcon';
+import { WebAlert } from './WebAlert';
 
 interface SidebarItem {
   key: string;
   title: string;
-  icon: string;
+  icon: keyof typeof IconNames;
   route: string;
   badge?: number;
 }
@@ -35,33 +37,33 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
     {
       key: 'dashboard',
       title: 'Dashboard',
-      icon: '🏠',
+      icon: 'home',
       route: '/dashboard',
     },
     {
       key: 'discover',
       title: 'Discover',
-      icon: '💕',
+      icon: 'discover',
       route: '/discover',
     },
     {
       key: 'matches',
       title: 'Matches',
-      icon: '❤️',
+      icon: 'matches',
       route: '/matches',
       badge: 3,
     },
     {
       key: 'messages',
       title: 'Messages',
-      icon: '💬',
+      icon: 'messages',
       route: '/messages',
       badge: 5,
     },
     {
       key: 'menu',
       title: 'Menu',
-      icon: '⚙️',
+      icon: 'settings',
       route: '/menu',
     },
   ];
@@ -92,137 +94,112 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
   };
 
   const handleSignOut = async () => {
-    try {
-      await signOut();
-      router.replace('/');
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
+    WebAlert.showConfirmation(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      async () => {
+        try {
+          await signOut();
+          router.replace('/login');
+        } catch (error) {
+          console.error('Error signing out:', error);
+          WebAlert.showError('Error', 'Failed to sign out. Please try again.');
+        }
+      }
+    );
   };
 
-  const isActive = (route: string) => {
-    return pathname === route;
-  };
+  const currentColors = theme.colors;
 
-  // Fallback styles for web if theme is not available
-  const fallbackColors = {
-    surface: '#F8F9FA',
-    border: '#E5E7EB',
-    primary: '#FF2E63',
-    textSecondary: '#6B7280',
-    surfaceVariant: '#FFF5F7',
-    error: '#EF4444',
-  };
-
-  const currentColors = theme?.colors || fallbackColors;
+  if (Platform.OS !== 'web') {
+    return null;
+  }
 
   return (
-    <Animated.View 
-      style={[
-        styles.container, 
-        { 
-          backgroundColor: currentColors.surface,
-          borderRightColor: currentColors.border,
-          width: widthAnim,
-        },
-        style
-      ]}
-    >
+    <Animated.View style={[
+      styles.container,
+      {
+        backgroundColor: currentColors.surface,
+        borderRightColor: currentColors.border,
+        width: widthAnim,
+      },
+      style
+    ]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: currentColors.border }]}>
-        <Animated.View style={[styles.logoContainer, { opacity: opacityAnim }]}>
-          {!isCollapsed && (
-            <Text style={[styles.logo, { color: currentColors.primary }]}>
-              Spark
-            </Text>
-          )}
+        <Animated.View style={[styles.headerContent, { opacity: opacityAnim }]}>
+          <Text style={[styles.title, { color: currentColors.text }]}>
+            Dating App
+          </Text>
         </Animated.View>
         <TouchableOpacity
-          style={[styles.collapseButton, { backgroundColor: currentColors.surfaceVariant }]}
+          style={[styles.collapseButton, { backgroundColor: currentColors.background }]}
           onPress={handleToggleCollapse}
-          activeOpacity={0.7}
         >
-          <Text style={[styles.collapseIcon, { color: currentColors.textSecondary }]}>
-            {isCollapsed ? '→' : '←'}
-          </Text>
+          <MaterialIcon
+            name={isCollapsed ? IconNames.forward : IconNames.back}
+            size={20}
+            color={currentColors.textSecondary}
+          />
         </TouchableOpacity>
       </View>
 
       {/* Navigation Items */}
-      <View style={styles.navContainer}>
-        {sidebarItems.map((item) => (
-          <TouchableOpacity
-            key={item.key}
-            style={[
-              styles.navItem,
-              isCollapsed && styles.navItemCollapsed,
-              isActive(item.route) && { 
-                backgroundColor: currentColors.surfaceVariant,
-                borderLeftColor: currentColors.primary,
-                borderLeftWidth: 3,
-              }
-            ]}
-            onPress={() => handleTabPress(item)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Text style={[
-                styles.icon,
-                { color: currentColors.textSecondary },
-                isActive(item.route) && { color: currentColors.primary }
-              ]}>
-                {item.icon}
-              </Text>
-              {item.badge && item.badge > 0 && (
-                <View style={[styles.badge, { backgroundColor: currentColors.primary }]}>
-                  <Text style={styles.badgeText}>
-                    {item.badge > 99 ? '99+' : item.badge}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Animated.View style={[styles.titleContainer, { opacity: opacityAnim }]}>
-              {!isCollapsed && (
+      <View style={styles.nav}>
+        {sidebarItems.map((item) => {
+          const isActive = pathname === item.route;
+          
+          return (
+            <TouchableOpacity
+              key={item.key}
+              style={[
+                styles.navItem,
+                isActive && [styles.navItemActive, { backgroundColor: currentColors.primary + '20' }],
+              ]}
+              onPress={() => handleTabPress(item)}
+            >
+              <View style={styles.iconContainer}>
+                <MaterialIcon
+                  name={IconNames[item.icon]}
+                  size={24}
+                  color={isActive ? currentColors.primary : currentColors.textSecondary}
+                />
+                {item.badge && item.badge > 0 && (
+                  <View style={[styles.badge, { backgroundColor: currentColors.primary }]}>
+                    <Text style={[styles.badgeText, { color: 'white' }]}>
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Animated.View style={[styles.labelContainer, { opacity: opacityAnim }]}>
                 <Text style={[
-                  styles.title,
-                  { color: currentColors.textSecondary },
-                  isActive(item.route) && { color: currentColors.primary, fontWeight: '600' }
+                  styles.navLabel,
+                  { color: isActive ? currentColors.primary : currentColors.textSecondary }
                 ]}>
                   {item.title}
                 </Text>
-              )}
-            </Animated.View>
-          </TouchableOpacity>
-        ))}
+              </Animated.View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Footer with Sign Out */}
+      {/* Sign Out Button */}
       <View style={[styles.footer, { borderTopColor: currentColors.border }]}>
-        <Animated.View style={[styles.footerTextContainer, { opacity: opacityAnim }]}>
-          {!isCollapsed && (
-            <Text style={[styles.footerText, { color: currentColors.textSecondary }]}>
-              Dating App v1.0
-            </Text>
-          )}
-        </Animated.View>
         <TouchableOpacity
-          style={[
-            styles.signOutButton, 
-            { backgroundColor: currentColors.error },
-            isCollapsed && styles.signOutButtonCollapsed
-          ]}
+          style={[styles.signOutButton, { backgroundColor: currentColors.primary }]}
           onPress={handleSignOut}
-          activeOpacity={0.7}
         >
-          <Text style={[styles.signOutIcon, { color: 'white' }]}>
-            🚪
-          </Text>
-          <Animated.View style={[styles.signOutTextContainer, { opacity: opacityAnim }]}>
-            {!isCollapsed && (
-              <Text style={[styles.signOutText, { color: 'white' }]}>
-                Sign Out
-              </Text>
-            )}
+          <MaterialIcon
+            name={IconNames.logout}
+            size={20}
+            color="white"
+          />
+          <Animated.View style={[styles.signOutLabelContainer, { opacity: opacityAnim }]}>
+            <Text style={styles.signOutLabel}>
+              Sign Out
+            </Text>
           </Animated.View>
         </TouchableOpacity>
       </View>
@@ -232,34 +209,33 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
 
 const styles = StyleSheet.create({
   container: {
+    position: 'relative' as any,
+    zIndex: 1000,
     height: '100%',
     borderRightWidth: 1,
     flexDirection: 'column',
+    // Add shadow for better visual separation
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-    // Web-specific styles using React Native properties
-    ...(Platform.OS === 'web' && {
-      position: 'relative',
-      zIndex: 1000,
-    }),
+    shadowRadius: 3,
+    elevation: 5,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: getResponsiveSpacing('md'),
-    paddingVertical: getResponsiveSpacing('lg'),
     borderBottomWidth: 1,
     minHeight: 60,
   },
-  logoContainer: {
+  headerContent: {
     flex: 1,
     justifyContent: 'center',
   },
-  logo: {
+  title: {
     fontSize: getResponsiveFontSize('lg'),
     fontWeight: 'bold',
   },
@@ -270,11 +246,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  collapseIcon: {
-    fontSize: getResponsiveFontSize('sm'),
-    fontWeight: '600',
-  },
-  navContainer: {
+  nav: {
     flex: 1,
     paddingVertical: getResponsiveSpacing('md'),
   },
@@ -282,88 +254,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: getResponsiveSpacing('md'),
-    paddingVertical: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
     marginHorizontal: getResponsiveSpacing('sm'),
-    marginVertical: 2,
-    borderRadius: getResponsiveSpacing('sm'),
-    borderLeftWidth: 0,
+    borderRadius: 8,
     minHeight: 48,
   },
-  navItemCollapsed: {
-    justifyContent: 'center',
-    paddingHorizontal: getResponsiveSpacing('sm'),
+  navItemActive: {
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent', // This will be overridden by the inline style
   },
   iconContainer: {
     position: 'relative',
-    width: 24,
-    height: 24,
+    marginRight: getResponsiveSpacing('md'),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  icon: {
-    fontSize: getResponsiveFontSize('md'),
-  },
-  titleContainer: {
+  labelContainer: {
     flex: 1,
     justifyContent: 'center',
   },
-  title: {
+  navLabel: {
     fontSize: getResponsiveFontSize('sm'),
     fontWeight: '500',
-    marginLeft: getResponsiveSpacing('md'),
   },
   badge: {
     position: 'absolute',
-    top: -4,
+    top: -8,
     right: -8,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
   badgeText: {
-    color: 'white',
-    fontSize: 10,
+    fontSize: getResponsiveFontSize('xs'),
     fontWeight: 'bold',
   },
   footer: {
-    paddingHorizontal: getResponsiveSpacing('md'),
-    paddingVertical: getResponsiveSpacing('md'),
+    padding: getResponsiveSpacing('md'),
     borderTopWidth: 1,
-  },
-  footerTextContainer: {
-    alignItems: 'center',
-    marginBottom: getResponsiveSpacing('sm'),
-  },
-  footerText: {
-    fontSize: getResponsiveFontSize('xs'),
-    textAlign: 'center',
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: getResponsiveSpacing('sm'),
     paddingHorizontal: getResponsiveSpacing('md'),
-    borderRadius: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: 8,
     minHeight: 40,
   },
-  signOutButtonCollapsed: {
-    justifyContent: 'center',
-    paddingHorizontal: getResponsiveSpacing('sm'),
-  },
-  signOutIcon: {
-    fontSize: getResponsiveFontSize('md'),
-  },
-  signOutTextContainer: {
+  signOutLabelContainer: {
     flex: 1,
     alignItems: 'center',
   },
-  signOutText: {
+  signOutLabel: {
     fontSize: getResponsiveFontSize('sm'),
     fontWeight: '500',
     marginLeft: getResponsiveSpacing('sm'),
+    color: 'white',
   },
 }); 

@@ -132,7 +132,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       {showSignupLink && onNavigateToSignup && (
         <View style={styles.switchContainer}>
           <Text style={[styles.switchText, { color: theme.colors.textSecondary }]}>
-            Don't have an account?
+            Don&apos;t have an account?
           </Text>
           <TouchableOpacity onPress={onNavigateToSignup}>
             <Text style={[styles.switchButton, { color: theme.colors.primary }]}>

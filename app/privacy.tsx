@@ -184,7 +184,7 @@ export default function PrivacyScreen() {
               { color: theme.colors.text },
               isDesktop && { fontSize: getDesktopFontSize('lg') }
             ]}>
-              7. Children's Privacy
+              7. Children&apos;s Privacy
             </Text>
             <Text style={[
               styles.sectionText,
@@ -208,7 +208,7 @@ export default function PrivacyScreen() {
               { color: theme.colors.textSecondary },
               isDesktop && { fontSize: getDesktopFontSize('md'), lineHeight: getDesktopFontSize('md') * 1.6 }
             ]}>
-              We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date.
+              We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the &ldquo;Last updated&rdquo; date.
             </Text>
           </View>
 

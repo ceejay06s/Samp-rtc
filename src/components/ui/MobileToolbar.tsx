@@ -3,11 +3,12 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
+import { IconNames, MaterialIcon } from './MaterialIcon';
 
 interface ToolbarItem {
   key: string;
   title: string;
-  icon: string;
+  icon: keyof typeof IconNames;
   route: string;
   badge?: number;
 }
@@ -24,33 +25,33 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({ style }) => {
     {
       key: 'dashboard',
       title: 'Dashboard',
-      icon: '🏠',
+      icon: 'home',
       route: '/dashboard',
     },
     {
       key: 'discover',
       title: 'Discover',
-      icon: '💕',
+      icon: 'discover',
       route: '/discover',
     },
     {
       key: 'matches',
       title: 'Matches',
-      icon: '❤️',
+      icon: 'matches',
       route: '/matches',
       badge: 3,
     },
     {
       key: 'messages',
       title: 'Messages',
-      icon: '💬',
+      icon: 'messages',
       route: '/messages',
       badge: 5,
     },
     {
       key: 'menu',
       title: 'Menu',
-      icon: '⚙️',
+      icon: 'settings',
       route: '/menu',
     },
   ];
@@ -61,47 +62,47 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({ style }) => {
     }
   };
 
-  const isActive = (route: string) => {
-    return pathname === route;
-  };
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border }, style]}>
-      {toolbarItems.map((item) => (
-        <TouchableOpacity
-          key={item.key}
-          style={[
-            styles.tab,
-            isActive(item.route) && { backgroundColor: theme.colors.surfaceVariant }
-          ]}
-          onPress={() => handleTabPress(item)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.iconContainer}>
+    <View style={[
+      styles.container,
+      {
+        backgroundColor: theme.colors.surface,
+        borderTopColor: theme.colors.border,
+      },
+      style
+    ]}>
+      {toolbarItems.map((item) => {
+        const isActive = pathname === item.route;
+        
+        return (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.tabItem}
+            onPress={() => handleTabPress(item)}
+          >
+            <View style={styles.iconContainer}>
+              <MaterialIcon
+                name={IconNames[item.icon]}
+                size={24}
+                color={isActive ? theme.colors.primary : theme.colors.textSecondary}
+              />
+              {item.badge && item.badge > 0 && (
+                <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
+                  <Text style={[styles.badgeText, { color: 'white' }]}>
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text style={[
-              styles.icon,
-              { color: theme.colors.textSecondary },
-              isActive(item.route) && { color: theme.colors.primary }
+              styles.tabLabel,
+              { color: isActive ? theme.colors.primary : theme.colors.textSecondary }
             ]}>
-              {item.icon}
+              {item.title}
             </Text>
-            {item.badge && item.badge > 0 && (
-              <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-                <Text style={styles.badgeText}>
-                  {item.badge > 99 ? '99+' : item.badge}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text style={[
-            styles.title,
-            { color: theme.colors.textSecondary },
-            isActive(item.route) && { color: theme.colors.primary, fontWeight: '600' }
-          ]}>
-            {item.title}
-          </Text>
-        </TouchableOpacity>
-      ))}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 };
@@ -109,23 +110,24 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({ style }) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    paddingHorizontal: getResponsiveSpacing('xs'),
-    paddingVertical: getResponsiveSpacing('sm'),
     borderTopWidth: 1,
+    paddingVertical: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('xs'),
+    // Add shadow for better visual separation
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-    minHeight: 60,
+    shadowRadius: 3,
+    elevation: 5,
   },
-  tab: {
+  tabItem: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: getResponsiveSpacing('xs'),
-    borderRadius: getResponsiveSpacing('sm'),
-    minHeight: 50,
+    paddingHorizontal: getResponsiveSpacing('xs'),
   },
   iconContainer: {
     position: 'relative',
@@ -133,29 +135,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  icon: {
-    fontSize: getResponsiveFontSize('md'),
-  },
-  title: {
-    fontSize: 10,
-    textAlign: 'center',
+  tabLabel: {
+    fontSize: getResponsiveFontSize('xs'),
     fontWeight: '500',
-    lineHeight: 12,
+    textAlign: 'center',
   },
   badge: {
     position: 'absolute',
-    top: -4,
+    top: -8,
     right: -8,
-    minWidth: 14,
-    height: 14,
-    borderRadius: 7,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
   },
   badgeText: {
-    color: 'white',
-    fontSize: 8,
+    fontSize: getResponsiveFontSize('xs'),
     fontWeight: 'bold',
   },
 }); 

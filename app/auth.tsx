@@ -4,6 +4,7 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { DatePicker } from '../src/components/ui/DatePicker';
+import { GenderDropdown } from '../src/components/ui/GenderDropdown';
 import { Input } from '../src/components/ui/Input';
 import { AuthService } from '../src/services/auth';
 import { calculateAge, formatDateToISO, getMaximumBirthdate, getMinimumBirthdate } from '../src/utils/dateUtils';
@@ -145,11 +146,12 @@ export default function AuthScreen() {
               maximumDate={getMinimumBirthdate()}
               minimumDate={getMaximumBirthdate()}
             />
-            <Input
-              placeholder="Gender"
+            <GenderDropdown
               value={gender}
-              onChangeText={setGender}
+              onValueChange={setGender}
               error={errors.gender}
+              label=""
+              placeholder="Select your gender"
             />
           </>
         )}

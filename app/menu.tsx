@@ -2,7 +2,9 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
-import { Card } from '../src/components/ui';
+import { Card } from '../src/components/ui/Card';
+import { WebAlert } from '../src/components/ui/WebAlert';
+import { usePlatform } from '../src/hooks/usePlatform';
 import { calculateAge } from '../src/utils/dateUtils';
 import { isDesktopBrowser } from '../src/utils/platform';
 import { getResponsiveFontSize, getResponsiveSpacing, isBreakpoint } from '../src/utils/responsive';
@@ -21,11 +23,20 @@ interface MenuItem {
 
 export default function MenuScreen() {
   const theme = useTheme();
+  const { isWeb: isWebPlatform } = usePlatform();
   const { signOut, user, profile, loading } = useAuth();
   const isDesktop = isBreakpoint.xl || isDesktopBrowser();
   const [notifications, setNotifications] = React.useState(true);
-  const [locationSharing, setLocationSharing] = React.useState(true);
   const [darkMode, setDarkMode] = React.useState(false);
+
+  // Helper function to show alerts that work on both web and mobile
+  const showAlert = (title: string, message?: string, buttons?: any[]) => {
+    if (isWebPlatform) {
+      WebAlert.alert(title, message, buttons);
+    } else {
+      Alert.alert(title, message, buttons);
+    }
+  };
 
   const getDesktopFontSize = (size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl') => {
     if (isDesktop) {
@@ -58,26 +69,42 @@ export default function MenuScreen() {
   };
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/login');
-            } catch (error) {
-              console.error('Sign out error:', error);
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
-            }
+    if (isWebPlatform) {
+      WebAlert.showConfirmation(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        async () => {
+          try {
+            await signOut();
+            router.replace('/login');
+          } catch (error) {
+            console.error('Sign out error:', error);
+            showAlert('Error', 'Failed to sign out. Please try again.');
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Out',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await signOut();
+                router.replace('/login');
+              } catch (error) {
+                console.error('Sign out error:', error);
+                Alert.alert('Error', 'Failed to sign out. Please try again.');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const menuItems: MenuItem[] = [
@@ -88,6 +115,14 @@ export default function MenuScreen() {
       icon: '👤',
       action: 'navigate',
       route: '/profile',
+    },
+    {
+      key: 'account',
+      title: 'Account Settings',
+      subtitle: 'Manage your account and security',
+      icon: '⚙️',
+      action: 'navigate',
+      route: '/account',
     },
     {
       key: 'preferences',
@@ -106,15 +141,7 @@ export default function MenuScreen() {
       value: notifications,
       onPress: () => setNotifications(!notifications),
     },
-    {
-      key: 'location',
-      title: 'Location Sharing',
-      subtitle: 'Control location visibility',
-      icon: '📍',
-      action: 'toggle',
-      value: locationSharing,
-      onPress: () => setLocationSharing(!locationSharing),
-    },
+
     {
       key: 'darkMode',
       title: 'Dark Mode',
@@ -242,7 +269,11 @@ export default function MenuScreen() {
       : null;
 
     return (
-      <View style={[styles.userProfileCard, { backgroundColor: theme.colors.surface }]}>
+      <TouchableOpacity 
+        style={[styles.userProfileCard, { backgroundColor: theme.colors.surface }]}
+        onPress={() => router.push(`/user-profile?userId=${user?.id}`)}
+        activeOpacity={0.8}
+      >
         <View style={styles.userProfileContent}>
           <View style={styles.avatarContainer}>
             {avatarUrl ? (
@@ -291,8 +322,18 @@ export default function MenuScreen() {
               </Text>
             )}
           </View>
+          
+          <View style={styles.profileArrow}>
+            <Text style={[
+              styles.arrow,
+              { color: theme.colors.textSecondary },
+              isDesktop && { fontSize: getDesktopFontSize('lg') }
+            ]}>
+              ›
+            </Text>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -525,6 +566,10 @@ const styles = StyleSheet.create({
   userBio: {
     fontSize: getResponsiveFontSize('sm'),
     marginTop: 4,
+  },
+  profileArrow: {
+    marginLeft: getResponsiveSpacing('sm'),
+    justifyContent: 'center',
   },
   userProfilePlaceholder: {
     width: '100%',

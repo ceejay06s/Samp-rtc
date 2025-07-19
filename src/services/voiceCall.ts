@@ -18,7 +18,7 @@ export class VoiceCallService {
           match_id: data.matchId,
           caller_id: user.id,
           receiver_id: data.receiverId,
-          status: CallStatus.INITIATED,
+          status: 'pending' as any, // Map CallStatus to VoiceCall status
         })
         .select()
         .single();
@@ -32,8 +32,14 @@ export class VoiceCallService {
 
   static async updateCallStatus(callId: string, status: CallStatus): Promise<VoiceCall> {
     try {
-      const updateData: Partial<VoiceCall> = {
-        status,
+      // Map CallStatus to VoiceCall status
+      const voiceCallStatus = status === CallStatus.CONNECTED ? 'active' :
+                             status === CallStatus.ENDED ? 'ended' :
+                             status === CallStatus.MISSED ? 'missed' :
+                             'pending';
+
+      const updateData: any = {
+        status: voiceCallStatus,
         updated_at: new Date().toISOString(),
       };
 
@@ -98,11 +104,7 @@ export class VoiceCallService {
         .from('voice_calls')
         .select(`
           *,
-          match:matches!voice_calls_match_id_fkey(
-            *,
-            user1_profile:profiles!matches_user1_id_fkey(*),
-            user2_profile:profiles!matches_user2_id_fkey(*)
-          )
+          match:matches!voice_calls_match_id_fkey(*)
         `)
         .or(`caller_id.eq.${userId},receiver_id.eq.${userId}`)
         .in('status', [CallStatus.ENDED, CallStatus.MISSED, CallStatus.REJECTED])
@@ -111,16 +113,29 @@ export class VoiceCallService {
 
       if (error) throw error;
 
-      return (data || []).map(call => {
+      const callsWithProfiles = await Promise.all((data || []).map(async call => {
         const match = call.match;
         const isCaller = call.caller_id === userId;
-        const otherProfile = isCaller ? match.user2_profile : match.user1_profile;
+        const otherUserId = isCaller ? match.user2_id : match.user1_id;
+        
+        // Fetch the other user's profile separately
+        const { data: otherProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', otherUserId)
+          .single();
+          
+        if (profileError) {
+          console.error('Failed to fetch other user profile:', profileError);
+        }
         
         return {
           ...call,
-          otherProfile,
+          otherProfile: otherProfile || null,
         };
-      });
+      }));
+
+      return callsWithProfiles;
     } catch (error) {
       throw new Error(`Failed to get call history: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

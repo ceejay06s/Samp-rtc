@@ -17,7 +17,10 @@
         "UIStatusBarStyle": "UIStatusBarStyleDefault",
         "UIStatusBarAnimation": "UIStatusBarAnimationSlide",
         "NSCameraUsageDescription": "This app needs access to camera to take profile photos.",
-        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select profile photos."
+        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select profile photos.",
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to find nearby places and improve your dating experience.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to find nearby places and improve your dating experience.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -33,7 +36,10 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -64,6 +70,15 @@
         {
           "photosPermission": "The app accesses your photos to let you select profile pictures.",
           "savePhotosPermission": "The app saves photos to your photo library."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "This app needs access to your location to find nearby places and improve your dating experience.",
+          "locationAlwaysAndWhenInUsePermission": "This app needs access to your location to find nearby places and improve your dating experience.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
         }
       ]
     ],
