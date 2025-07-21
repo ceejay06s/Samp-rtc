@@ -8,6 +8,7 @@ import { DatePicker } from '../src/components/ui/DatePicker';
 import { GenderSelector } from '../src/components/ui/GenderSelector';
 import { Input } from '../src/components/ui/Input';
 import { PhotoGallery } from '../src/components/ui/PhotoGallery';
+import { PhotoUploadWithCrop } from '../src/components/ui/PhotoUploadWithCrop';
 import { RangeSlider } from '../src/components/ui/RangeSlider';
 import { SingleSlider } from '../src/components/ui/Slider';
 import { WebAlert } from '../src/components/ui/WebAlert';
@@ -26,6 +27,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   
   // Profile state
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -120,21 +122,7 @@ export default function ProfileScreen() {
     }
 
     if (bio.length > 500) {
-      newErrors.bio = 'Bio must be less than 500 characters';
-    }
-
-    if (maxDistance < 1 || maxDistance > 100) {
-      newErrors.maxDistance = 'Max distance must be between 1 and 100 miles';
-    }
-
-    if (minAge < 18 || minAge > 100) {
-      newErrors.minAge = 'Minimum age must be between 18 and 100';
-    }
-    if (maxAge < 18 || maxAge > 100) {
-      newErrors.maxAge = 'Maximum age must be between 18 and 100';
-    }
-    if (minAge > maxAge) {
-      newErrors.maxAge = 'Maximum age must be greater than minimum age';
+      newErrors.bio = 'Bio must be 500 characters or less';
     }
 
     setErrors(newErrors);
@@ -142,18 +130,23 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
-    if (!user || !validateForm()) return;
+    if (!user) {
+      showAlert('Error', 'Please log in to save your profile');
+      return;
+    }
+
+    if (!validateForm()) {
+      return;
+    }
 
     try {
       setSaving(true);
       
-      console.log('Saving profile with gender:', gender);
-      
-      const updateData = {
+      const profileData = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         birthdate: birthdate ? formatDateToISO(birthdate) : undefined,
-        gender: gender,
+        gender,
         bio: bio.trim(),
         location: location.trim(),
         interests,
@@ -163,36 +156,27 @@ export default function ProfileScreen() {
         max_age: maxAge,
         photos,
       };
-      
-      console.log('Update data:', updateData);
-      
-      await AuthService.updateProfile(user.id, updateData);
 
+      await AuthService.updateProfile(user.id, profileData);
+      await refreshProfile();
+      
       showAlert('Success', 'Profile updated successfully!');
-      await refreshProfile(); // Refresh profile in context
-      await loadProfile(); // Reload profile to get updated data
     } catch (error) {
-      console.error('Failed to update profile:', error);
-      showAlert('Error', 'Failed to update profile. Please try again.');
+      console.error('Failed to save profile:', error);
+      showAlert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
   const toggleInterest = (interest: string) => {
-    setInterests(prev => {
-      if (prev.includes(interest)) {
-        // Remove interest if already selected
-        return prev.filter(i => i !== interest);
-      } else {
-        // Add interest only if under the limit
-        if (prev.length >= 7) {
-          showAlert('Interest Limit', 'You can only select up to 7 interests. Please remove one before adding another.');
-          return prev;
-        }
-        return [...prev, interest];
-      }
-    });
+    setInterests(prev => 
+      prev.includes(interest) 
+        ? prev.filter(i => i !== interest)
+        : prev.length < 7 
+          ? [...prev, interest]
+          : prev
+    );
   };
 
   const toggleLookingFor = (gender: string) => {
@@ -203,7 +187,8 @@ export default function ProfileScreen() {
     );
   };
 
-  const addPhoto = async () => {
+  // New photo upload handler with cropping
+  const handlePhotoUpload = async (imageUrl: string) => {
     if (!user) {
       showAlert('Error', 'Please log in to add photos');
       return;
@@ -212,31 +197,15 @@ export default function ProfileScreen() {
     try {
       setUploadingPhoto(true);
       
-      const photoResult = await PhotoUploadService.showImagePickerOptions();
-      if (photoResult) {
-        // Validate the image
-        const validation = PhotoUploadService.validateImage(photoResult);
-        if (!validation.isValid) {
-          showAlert('Invalid Image', validation.error);
-          return;
-        }
-
-        // Upload the photo (works with both free and paid plans)
-        const photoUrl = await PhotoUploadService.uploadPhotoToServer(photoResult);
-        
-        // Add to local state
-        setPhotos(prev => [...prev, photoUrl]);
-        
-        // Save to profile immediately
-        await AuthService.updateProfile(user.id, { photos: [...photos, photoUrl] });
-        
-        // Show appropriate success message based on upload type
-        if (photoUrl.startsWith('data:')) {
-          showAlert('Success', 'Photo added successfully! (Stored as base64 - free plan compatible)');
-        } else {
-          showAlert('Success', 'Photo added successfully! (Stored in Supabase storage)');
-        }
-      }
+      // Add to local state
+      setPhotos(prev => [...prev, imageUrl]);
+      
+      // Save to profile immediately
+      await AuthService.updateProfile(user.id, { photos: [...photos, imageUrl] });
+      
+      // Show success message
+      showAlert('Success', 'Photo added successfully!');
+      setShowPhotoUpload(false);
     } catch (error) {
       console.error('Failed to add photo:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -246,49 +215,14 @@ export default function ProfileScreen() {
     }
   };
 
-  // Web-specific file handler
+  // Legacy photo upload methods (keeping for backward compatibility)
+  const addPhoto = async () => {
+    setShowPhotoUpload(true);
+  };
+
+  // Web-specific file handler (keeping for backward compatibility)
   const handleWebFileSelect = async (file: File) => {
-    if (!user) {
-      showAlert('Error', 'Please log in to add photos');
-      return;
-    }
-
-    try {
-      setUploadingPhoto(true);
-      
-      // Process the file using the web upload method
-      const photoResult = await PhotoUploadService.uploadFileFromWeb(file);
-      if (photoResult) {
-        // Validate the image
-        const validation = PhotoUploadService.validateImage(photoResult);
-        if (!validation.isValid) {
-          showAlert('Invalid Image', validation.error);
-          return;
-        }
-
-        // Upload the photo (works with both free and paid plans)
-        const photoUrl = await PhotoUploadService.uploadPhotoToServer(photoResult);
-        
-        // Add to local state
-        setPhotos(prev => [...prev, photoUrl]);
-        
-        // Save to profile immediately
-        await AuthService.updateProfile(user.id, { photos: [...photos, photoUrl] });
-        
-        // Show appropriate success message based on upload type
-        if (photoUrl.startsWith('data:')) {
-          showAlert('Success', 'Photo added successfully! (Stored as base64 - free plan compatible)');
-        } else {
-          showAlert('Success', 'Photo added successfully! (Stored in Supabase storage)');
-        }
-      }
-    } catch (error) {
-      console.error('Failed to add photo:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      showAlert('Error', `Failed to add photo: ${errorMessage}`);
-    } finally {
-      setUploadingPhoto(false);
-    }
+    setShowPhotoUpload(true);
   };
 
   const testBucketConnection = async () => {
@@ -337,6 +271,9 @@ export default function ProfileScreen() {
   };
 
   const removePhoto = (index: number) => {
+    console.log('🖼️ removePhoto called with index:', index);
+    console.log('🖼️ Current photos:', photos);
+    
     if (!user) {
       showAlert('Error', 'Please log in to remove photos');
       return;
@@ -344,68 +281,57 @@ export default function ProfileScreen() {
 
     const showDeleteConfirmation = () => {
       if (isWeb) {
+        console.log('🖼️ Showing web delete confirmation');
         WebAlert.showDeleteConfirmation(
           'Remove Photo',
           'Are you sure you want to remove this photo?',
           async () => {
+            console.log('🖼️ Web delete confirmed, removing photo...');
             try {
-              const photoToRemove = photos[index];
-              
-              // Remove from local state first
               const updatedPhotos = photos.filter((_, i) => i !== index);
+              console.log('🖼️ Updated photos array:', updatedPhotos);
               setPhotos(updatedPhotos);
-              
-              // Try to delete from Supabase storage if it's a Supabase URL
-              if (photoToRemove.includes('supabase.co') || photoToRemove.includes('storage.googleapis.com')) {
-                await PhotoUploadService.deletePhotoFromSupabase(photoToRemove);
-              }
-              
-              // Save the updated photos array to Supabase
               await AuthService.updateProfile(user.id, { photos: updatedPhotos });
               
+              // Refresh profile in context to ensure UI updates
+              console.log('🖼️ Refreshing profile context...');
+              await refreshProfile();
+              
+              console.log('🖼️ Photo removed successfully!');
               showAlert('Success', 'Photo removed successfully!');
             } catch (error) {
-              console.error('Error removing photo:', error);
+              console.error('❌ Failed to remove photo:', error);
               showAlert('Error', 'Failed to remove photo. Please try again.');
-              // Reload photos to restore state
-              await loadProfile();
             }
           }
         );
       } else {
+        console.log('🖼️ Showing mobile delete confirmation');
         Alert.alert(
           'Remove Photo',
           'Are you sure you want to remove this photo?',
           [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
+            { text: 'Cancel', style: 'cancel' },
             {
               text: 'Remove',
               style: 'destructive',
               onPress: async () => {
+                console.log('🖼️ Mobile delete confirmed, removing photo...');
                 try {
-                  const photoToRemove = photos[index];
-                  
-                  // Remove from local state first
                   const updatedPhotos = photos.filter((_, i) => i !== index);
+                  console.log('🖼️ Updated photos array:', updatedPhotos);
                   setPhotos(updatedPhotos);
-                  
-                  // Try to delete from Supabase storage if it's a Supabase URL
-                  if (photoToRemove.includes('supabase.co') || photoToRemove.includes('storage.googleapis.com')) {
-                    await PhotoUploadService.deletePhotoFromSupabase(photoToRemove);
-                  }
-                  
-                  // Save the updated photos array to Supabase
                   await AuthService.updateProfile(user.id, { photos: updatedPhotos });
                   
+                  // Refresh profile in context to ensure UI updates
+                  console.log('🖼️ Refreshing profile context...');
+                  await refreshProfile();
+                  
+                  console.log('🖼️ Photo removed successfully!');
                   showAlert('Success', 'Photo removed successfully!');
                 } catch (error) {
-                  console.error('Error removing photo:', error);
+                  console.error('❌ Failed to remove photo:', error);
                   showAlert('Error', 'Failed to remove photo. Please try again.');
-                  // Reload photos to restore state
-                  await loadProfile();
                 }
               },
             },
@@ -418,33 +344,17 @@ export default function ProfileScreen() {
   };
 
   const handleAgeRangeChange = (min: number, max: number) => {
-    console.log('Age range changed:', { min, max, currentMin: minAge, currentMax: maxAge });
     setMinAge(min);
     setMaxAge(max);
   };
 
-  if (authLoading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-            Loading your profile...
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-            Loading profile...
-          </Text>
-        </View>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Loading profile...
+        </Text>
       </View>
     );
   }
@@ -456,6 +366,17 @@ export default function ProfileScreen() {
           Please log in to view your profile
         </Text>
       </View>
+    );
+  }
+
+  // Show photo upload cropper if active
+  if (showPhotoUpload) {
+    return (
+      <PhotoUploadWithCrop
+        onUploadComplete={handlePhotoUpload}
+        onCancel={() => setShowPhotoUpload(false)}
+        aspectRatio={3/4}
+      />
     );
   }
 
@@ -541,14 +462,14 @@ export default function ProfileScreen() {
         {/* Photos */}
         <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Photos</Text>
-                      <PhotoGallery
-              photos={photos}
-              onRemovePhoto={removePhoto}
-              onAddPhoto={addPhoto}
-              maxPhotos={6}
-              uploading={uploadingPhoto}
-              onFileSelect={handleWebFileSelect}
-            />
+          <PhotoGallery
+            photos={photos}
+            onRemovePhoto={removePhoto}
+            onAddPhoto={addPhoto}
+            maxPhotos={6}
+            uploading={uploadingPhoto}
+            onFileSelect={handleWebFileSelect}
+          />
           
           {/* Test Bucket Connection Button */}
           <TouchableOpacity
@@ -599,61 +520,59 @@ export default function ProfileScreen() {
           </View>
           {interests.length >= 7 && (
             <Text style={[styles.interestLimitText, { color: theme.colors.textSecondary }]}>
-              Maximum 7 interests selected. Remove one to add another.
+              Maximum 7 interests allowed
             </Text>
           )}
+        </Card>
+
+        {/* Looking For */}
+        <Card style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Looking For</Text>
+          <View style={styles.lookingForContainer}>
+            {['male', 'female', 'non-binary'].map(genderOption => (
+              <TouchableOpacity
+                key={genderOption}
+                style={[
+                  styles.lookingForTag,
+                  {
+                    backgroundColor: lookingFor.includes(genderOption) ? theme.colors.primary : theme.colors.surface,
+                    borderColor: theme.colors.border,
+                  }
+                ]}
+                onPress={() => toggleLookingFor(genderOption)}
+              >
+                <Text style={[
+                  styles.lookingForText,
+                  { color: lookingFor.includes(genderOption) ? 'white' : theme.colors.text }
+                ]}>
+                  {genderOption.charAt(0).toUpperCase() + genderOption.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </Card>
 
         {/* Preferences */}
         <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferences</Text>
           
-          <View style={styles.preferenceRow}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Looking for</Text>
-            <GenderSelector
-              value={''}
-              onValueChange={() => {}}
-              multiple
-              selectedValues={lookingFor}
-              onValuesChange={setLookingFor}
-              label={''}
-              type="preference"
-            />
-          </View>
-
-          <View style={styles.preferenceRow}>
-            <View style={styles.sliderHeader}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Max Distance</Text>
-              <Text style={[styles.ageRangeText, { color: theme.colors.text }]}>
-                {maxDistance} miles
-              </Text>
-            </View>
+          <View style={styles.preferenceItem}>
+            <Text style={[styles.preferenceLabel, { color: theme.colors.text }]}>
+              Maximum Distance: {maxDistance} km
+            </Text>
             <SingleSlider
               value={maxDistance}
-              onValueChange={(value) => setMaxDistance(value)}
+              onValueChange={setMaxDistance}
               minValue={1}
               maxValue={100}
               step={1}
-              showValue={false}
             />
-            <View style={styles.sliderIndicators}>
-              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
-                1 mile
-              </Text>
-              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
-                100 miles
-              </Text>
-            </View>
           </View>
 
-          <View style={styles.ageRangeRow}>
-            <View style={styles.sliderHeader}>
-              <Text style={[styles.label, { color: theme.colors.text }]}>Age Range</Text>
-              <Text style={[styles.ageRangeText, { color: theme.colors.text }]}>
-                {minAge} - {maxAge} years
-              </Text>
-            </View>
-            
+          <View style={styles.preferenceItem}>
+            <Text style={[styles.preferenceLabel, { color: theme.colors.text }]}>
+              Age Range: {minAge} - {maxAge} years
+            </Text>
             <RangeSlider
               minValue={minAge}
               maxValue={maxAge}
@@ -661,27 +580,19 @@ export default function ProfileScreen() {
               minRange={18}
               maxRange={100}
               step={1}
-              showValues={false}
-              disabled={saving}
             />
-            <View style={styles.sliderIndicators}>
-              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
-                18 years
-              </Text>
-              <Text style={[styles.sliderMinMax, { color: theme.colors.textSecondary }]}>
-                100 years
-              </Text>
-            </View>
           </View>
         </Card>
 
         {/* Save Button */}
-        <Button
-          title="Save Changes"
-          onPress={handleSave}
-          loading={saving}
-          style={styles.saveButton}
-        />
+        <View style={styles.saveContainer}>
+          <Button
+            title={saving ? 'Saving...' : 'Save Profile'}
+            onPress={handleSave}
+            disabled={saving}
+            style={styles.saveButton}
+          />
+        </View>
       </View>
     </ScrollView>
   );
@@ -923,5 +834,31 @@ const styles = StyleSheet.create({
   },
   sliderMinMax: {
     fontSize: getResponsiveFontSize('xs'),
+  },
+  lookingForContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: getResponsiveSpacing('sm'),
+  },
+  lookingForTag: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  lookingForText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+  },
+  preferenceItem: {
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  preferenceLabel: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  saveContainer: {
+    marginTop: getResponsiveSpacing('lg'),
   },
 }); 

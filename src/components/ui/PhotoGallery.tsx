@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePlatform } from '../../hooks/usePlatform';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
@@ -26,21 +26,11 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
   const { isWeb } = usePlatform();
 
   const handleRemovePhoto = (index: number) => {
-    Alert.alert(
-      'Remove Photo',
-      'Are you sure you want to remove this photo?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => onRemovePhoto(index),
-        },
-      ]
-    );
+    console.log('🖼️ PhotoGallery: handleRemovePhoto called with index:', index);
+    console.log('🖼️ PhotoGallery: Total photos:', photos.length);
+    
+    // Call the parent's removePhoto function directly - it will handle the confirmation
+    onRemovePhoto(index);
   };
 
   const renderAddPhotoButton = () => {
@@ -110,6 +100,8 @@ export const PhotoGallery: React.FC<PhotoGalleryProps> = ({
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => handleRemovePhoto(index)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={styles.removeButtonText}>×</Text>
             </TouchableOpacity>
@@ -152,12 +144,12 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'red',
+    top: -8,
+    right: -8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FF4444',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -165,9 +157,10 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+    zIndex: 10,
   },
   removeButtonText: {
     color: 'white',

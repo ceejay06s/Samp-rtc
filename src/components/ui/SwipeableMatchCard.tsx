@@ -67,7 +67,7 @@ export const SwipeableMatchCard: React.FC<SwipeableMatchCardProps> = ({
   const lastSeen = otherProfile.last_seen;
   const age = otherProfile.birthdate ? calculateAge(otherProfile.birthdate) : null;
   const location = otherProfile.location ? 
-    `${otherProfile.location.city || ''}${otherProfile.location.state ? `, ${otherProfile.location.state}` : ''}`.trim() : 
+    `${otherProfile.location.city || ''}${otherProfile.location.state ? `, ${otherProfile.location.state}` : ''}${otherProfile.location.country ? `, ${otherProfile.location.country}` : ''}`.trim() : 
     null;
   const profilePhoto = otherProfile.photos?.[0] || 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=No+Photo';
 

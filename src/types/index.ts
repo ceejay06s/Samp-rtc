@@ -374,18 +374,23 @@ export interface Post {
   created_at: string;
   updated_at: string;
   // Populated fields
-  user_profile?: Profile;
   liked_by_current_user?: boolean;
+  user_profile?: Profile; // User profile information
 }
 
 export interface PostComment {
   id: string;
   post_id: string;
   user_id: string;
+  parent_id?: string; // For threaded comments - references another comment
   content: string;
   created_at: string;
   updated_at: string;
+  // Populated fields
   user_profile?: Profile;
+  replies?: PostComment[]; // Nested replies
+  reply_count?: number; // Number of replies
+  is_expanded?: boolean; // UI state for showing/hiding replies
 }
 
 export interface PostLike {

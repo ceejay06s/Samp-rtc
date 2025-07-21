@@ -74,38 +74,6 @@ export default function MatchesScreen() {
     loadMatches();
   }, [loadMatches]);
 
-  // Format location to show only city and state
-  const formatLocationDisplay = (location?: string): string => {
-    if (!location) return '';
-
-    const parts = location.split(',').map(part => part.trim());
-    
-    if (parts.length >= 2) {
-      // US state pattern recognition
-      const statePattern = /^[A-Z]{2}$|^(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)$/i;
-      
-      for (let i = parts.length - 1; i >= 0; i--) {
-        if (statePattern.test(parts[i])) {
-          const stateIndex = i;
-          const cityIndex = stateIndex - 1;
-          
-          if (cityIndex >= 0) {
-            return `${parts[cityIndex]}, ${parts[stateIndex]}`;
-          } else {
-            return parts[stateIndex];
-          }
-        }
-      }
-      
-      // Fallback: last two parts
-      if (parts.length >= 2) {
-        return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
-      }
-    }
-    
-    return parts[0] || location;
-  };
-
   const getMatchLevelText = (level: MatchLevel): string => {
     switch (level) {
       case MatchLevel.LEVEL_1:
@@ -150,7 +118,7 @@ export default function MatchesScreen() {
     const otherProfile = getOtherProfile(match);
     if (otherProfile?.user_id) {
       // Navigate to user profile screen
-      router.push(`/user-profile?userId=${otherProfile.user_id}`);
+              router.push(`/user-profile/${otherProfile.user_id}`);
     }
   };
 
@@ -259,19 +227,19 @@ export default function MatchesScreen() {
             backgroundColor: theme.colors.surfaceVariant,
             borderColor: theme.colors.primary,
           }
-        ]}
+        ]} 
         onPress={() => handleMatchPress(match)}
         activeOpacity={0.7}
       >
-        <Image
-          source={{ uri: profilePhoto }}
+            <Image
+              source={{ uri: profilePhoto }}
           style={styles.profileImage}
-          defaultSource={{ uri: 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Loading' }}
-        />
+              defaultSource={{ uri: 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Loading' }}
+            />
         
         {/* Online status indicator */}
         <View style={[
-          styles.onlineIndicator,
+                styles.onlineIndicator, 
           {
             backgroundColor: isOnline ? theme.colors.success : theme.colors.disabled,
             width: isDesktop ? 12 : 10,
@@ -286,14 +254,14 @@ export default function MatchesScreen() {
           styles.profileInfo,
           { padding: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs') }
         ]}>
-          <Text style={[
+              <Text style={[
             styles.profileName, 
             { 
               color: 'white',
               fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
               fontWeight: '600'
             }
-          ]}>
+              ]}>
             {otherProfile.first_name}
           </Text>
           
@@ -331,7 +299,7 @@ export default function MatchesScreen() {
 
     return (
       <View style={styles.sectionContainer}>
-        <Text style={[
+                <Text style={[
           styles.sectionTitle, 
           { 
             color: theme.colors.text,
@@ -341,7 +309,7 @@ export default function MatchesScreen() {
           }
         ]}>
           {title} ({matches.length})
-        </Text>
+                </Text>
         <FlatList
           data={matches}
           renderItem={renderProfileCard}
@@ -353,7 +321,7 @@ export default function MatchesScreen() {
               justifyContent: 'flex-start', // Left align for both desktop and mobile
               paddingHorizontal: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
             }
-          ]}
+                ]}
           contentContainerStyle={[
             styles.gridContainer,
             { 
@@ -364,7 +332,7 @@ export default function MatchesScreen() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={false}
         />
-      </View>
+        </View>
     );
   };
 
@@ -444,7 +412,7 @@ export default function MatchesScreen() {
       { 
         backgroundColor: theme.colors.background,
         paddingHorizontal: isDesktop ? getResponsiveSpacing('md') : getResponsiveSpacing('sm'),
-        paddingTop: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+        paddingTop: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
       }
     ]}>
       <View style={[styles.header, isDesktop && styles.desktopHeader]}>
@@ -524,19 +492,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: getResponsiveSpacing('md'),
-    paddingTop: getResponsiveSpacing('lg'),
+    paddingTop: getResponsiveSpacing('sm'),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Platform.OS === 'ios' ? 50 : 20,
-    marginBottom: getResponsiveSpacing('lg'),
+    marginTop: Platform.OS === 'ios' ? 20 : 10,
+    marginBottom: getResponsiveSpacing('md'),
     paddingHorizontal: getResponsiveSpacing('sm'),
   },
   desktopHeader: {
-    marginTop: 80,
-    marginBottom: getResponsiveSpacing('xl'),
+    marginTop: getResponsiveSpacing('md'),
+    marginBottom: getResponsiveSpacing('lg'),
   },
   backButton: {
     fontSize: getResponsiveFontSize('md'),

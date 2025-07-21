@@ -51,7 +51,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({ style }) => {
     {
       key: 'menu',
       title: 'Menu',
-      icon: 'settings',
+      icon: 'menu',
       route: '/menu',
     },
   ];

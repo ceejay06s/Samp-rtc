@@ -155,11 +155,11 @@ export default function ChatScreen() {
           onBack={() => router.back()}
         />
       ) : (
-        <RealtimeChat
-          conversationId={conversation.id}
-          otherUserName={otherProfile.first_name}
-          onBack={() => router.back()}
-        />
+    <RealtimeChat
+      conversationId={conversation.id}
+      otherUserName={otherProfile.first_name}
+      onBack={() => router.back()}
+    />
       )}
     </View>
   );

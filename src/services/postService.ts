@@ -12,12 +12,49 @@ export interface CreatePostData {
 
 export interface UpdatePostData {
   content?: string;
+  images?: string[];
   tags?: string[];
   location?: string;
   is_public?: boolean;
 }
 
 export class PostService {
+  // Helper function to get user data from auth.users
+  private static async getUserData(userId: string) {
+    try {
+      // Try to get user data from profiles table first
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (profile && !profileError) {
+        return profile;
+      }
+
+      // If no profile, try to get from auth.users via RPC
+      const { data: authUser, error: authError } = await supabase
+        .rpc('get_user_metadata', { user_id: userId });
+
+      if (authUser && !authError) {
+        return {
+          id: userId,
+          user_id: userId,
+          first_name: authUser.first_name || '',
+          last_name: authUser.last_name || '',
+          photos: authUser.avatar_url ? [authUser.avatar_url] : [],
+          birthdate: authUser.birthdate || null
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      return null;
+    }
+  }
+
   static async createPost(userId: string, data: CreatePostData): Promise<Post> {
     try {
       console.log('Creating post for user:', userId, 'with data:', data);
@@ -40,7 +77,13 @@ export class PostService {
         .insert(postData)
         .select(`
           *,
-          user_profile:profiles!posts_user_id_fkey(*)
+          user_profile:profiles!posts_user_id_fkey(
+            id,
+            first_name,
+            last_name,
+            photos,
+            birthdate
+          )
         `)
         .single();
 
@@ -80,10 +123,7 @@ export class PostService {
     try {
       let query = supabase
         .from('posts')
-        .select(`
-          *,
-          user_profile:profiles!posts_user_id_fkey(*)
-        `)
+        .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
@@ -98,7 +138,18 @@ export class PostService {
         throw error;
       }
 
-      return posts || [];
+      // Enrich posts with user data
+      const enrichedPosts = await Promise.all(
+        (posts || []).map(async (post) => {
+          const userData = await this.getUserData(post.user_id);
+          return {
+            ...post,
+            user_profile: userData
+          };
+        })
+      );
+
+      return enrichedPosts;
     } catch (error) {
       console.error('Failed to get user posts:', error);
       throw new Error(`Failed to fetch posts: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -109,10 +160,7 @@ export class PostService {
     try {
       const { data: posts, error } = await supabase
         .from('posts')
-        .select(`
-          *,
-          user_profile:profiles!posts_user_id_fkey(*)
-        `)
+        .select('*')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -122,7 +170,18 @@ export class PostService {
         throw error;
       }
 
-      return posts || [];
+      // Enrich posts with user data
+      const enrichedPosts = await Promise.all(
+        (posts || []).map(async (post) => {
+          const userData = await this.getUserData(post.user_id);
+          return {
+            ...post,
+            user_profile: userData
+          };
+        })
+      );
+
+      return enrichedPosts;
     } catch (error) {
       console.error('Failed to get public posts:', error);
       throw new Error(`Failed to fetch posts: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -133,10 +192,7 @@ export class PostService {
     try {
       const { data: post, error } = await supabase
         .from('posts')
-        .select(`
-          *,
-          user_profile:profiles!posts_user_id_fkey(*)
-        `)
+        .select('*')
         .eq('id', postId)
         .single();
 
@@ -149,6 +205,13 @@ export class PostService {
         return null;
       }
 
+      // Enrich post with user data
+      const userData = await this.getUserData(post.user_id);
+      const enrichedPost = {
+        ...post,
+        user_profile: userData
+      };
+
       // Check if current user liked this post
       if (currentUserId) {
         const { data: like } = await supabase
@@ -156,12 +219,12 @@ export class PostService {
           .select('id')
           .eq('post_id', postId)
           .eq('user_id', currentUserId)
-          .single();
+          .maybeSingle();
 
-        post.liked_by_current_user = !!like;
+        enrichedPost.liked_by_current_user = !!like;
       }
 
-      return post;
+      return enrichedPost;
     } catch (error) {
       console.error('Failed to get post:', error);
       return null;
@@ -182,7 +245,13 @@ export class PostService {
         .eq('user_id', userId)
         .select(`
           *,
-          user_profile:profiles!posts_user_id_fkey(*)
+          user_profile:profiles!posts_user_id_fkey(
+            id,
+            first_name,
+            last_name,
+            photos,
+            birthdate
+          )
         `)
         .single();
 
@@ -222,15 +291,18 @@ export class PostService {
 
   static async likePost(postId: string, userId: string): Promise<void> {
     try {
+      console.log('Liking post:', postId, 'by user:', userId);
+      
       // Check if already liked
       const { data: existingLike } = await supabase
         .from('post_likes')
         .select('id')
         .eq('post_id', postId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (existingLike) {
+        console.log('Post already liked by user');
         throw new Error('Post already liked');
       }
 
@@ -248,14 +320,27 @@ export class PostService {
         throw likeError;
       }
 
-      // Update likes count
-      const { error: updateError } = await supabase.rpc('increment_post_likes', {
-        post_id: postId
-      });
+      console.log('Like added successfully');
+      
+      // Update likes count directly (fallback if trigger doesn't work)
+      const { data: currentPost } = await supabase
+        .from('posts')
+        .select('likes_count')
+        .eq('id', postId)
+        .single();
+
+      if (currentPost) {
+        const { error: updateError } = await supabase
+          .from('posts')
+          .update({ 
+            likes_count: (currentPost.likes_count || 0) + 1
+          })
+          .eq('id', postId);
 
       if (updateError) {
         console.error('Error updating likes count:', updateError);
         // Don't throw here as the like was added successfully
+        }
       }
     } catch (error) {
       console.error('Failed to like post:', error);
@@ -265,6 +350,8 @@ export class PostService {
 
   static async unlikePost(postId: string, userId: string): Promise<void> {
     try {
+      console.log('Unliking post:', postId, 'by user:', userId);
+      
       // Remove like
       const { error: unlikeError } = await supabase
         .from('post_likes')
@@ -277,14 +364,27 @@ export class PostService {
         throw unlikeError;
       }
 
-      // Update likes count
-      const { error: updateError } = await supabase.rpc('decrement_post_likes', {
-        post_id: postId
-      });
+      console.log('Like removed successfully');
+      
+      // Update likes count directly (fallback if trigger doesn't work)
+      const { data: currentPost } = await supabase
+        .from('posts')
+        .select('likes_count')
+        .eq('id', postId)
+        .single();
+
+      if (currentPost) {
+        const { error: updateError } = await supabase
+          .from('posts')
+          .update({ 
+            likes_count: Math.max((currentPost.likes_count || 0) - 1, 0)
+          })
+          .eq('id', postId);
 
       if (updateError) {
         console.error('Error updating likes count:', updateError);
         // Don't throw here as the unlike was successful
+        }
       }
     } catch (error) {
       console.error('Failed to unlike post:', error);
@@ -294,12 +394,10 @@ export class PostService {
 
   static async getPostComments(postId: string): Promise<PostComment[]> {
     try {
+      // Get all comments for the post
       const { data: comments, error } = await supabase
         .from('post_comments')
-        .select(`
-          *,
-          user_profile:profiles!post_comments_user_id_fkey(*)
-        `)
+        .select('*')
         .eq('post_id', postId)
         .order('created_at', { ascending: true });
 
@@ -308,28 +406,64 @@ export class PostService {
         throw error;
       }
 
-      return comments || [];
+      // Build threaded structure and enrich with user data
+      const commentMap = new Map<string, PostComment>();
+      const topLevelComments: PostComment[] = [];
+
+      // First pass: create map of all comments and enrich with user data
+      const enrichedComments = await Promise.all(
+        (comments || []).map(async (comment) => {
+          const userData = await this.getUserData(comment.user_id);
+          return {
+            ...comment,
+            user_profile: userData,
+            replies: [],
+            is_expanded: false
+          };
+        })
+      );
+
+      // Second pass: build tree structure
+      enrichedComments.forEach(comment => {
+        commentMap.set(comment.id, comment);
+      });
+
+      enrichedComments.forEach(comment => {
+        if (comment.parent_id) {
+          // This is a reply
+          const parentComment = commentMap.get(comment.parent_id);
+          if (parentComment) {
+            parentComment.replies = parentComment.replies || [];
+            parentComment.replies.push(comment);
+          }
+        } else {
+          // This is a top-level comment
+          topLevelComments.push(comment);
+        }
+      });
+
+      return topLevelComments;
     } catch (error) {
       console.error('Failed to get comments:', error);
       throw new Error(`Failed to fetch comments: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  static async addComment(postId: string, userId: string, content: string): Promise<PostComment> {
+  static async addComment(postId: string, userId: string, content: string, parentId?: string): Promise<PostComment> {
     try {
+      const commentData = {
+        post_id: postId,
+        user_id: userId,
+        content,
+        parent_id: parentId || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
       const { data: comment, error } = await supabase
         .from('post_comments')
-        .insert({
-          post_id: postId,
-          user_id: userId,
-          content,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select(`
-          *,
-          user_profile:profiles!post_comments_user_id_fkey(*)
-        `)
+        .insert(commentData)
+        .select('*')
         .single();
 
       if (error) {
@@ -341,20 +475,91 @@ export class PostService {
         throw new Error('Comment creation failed');
       }
 
-      // Update comments count
-      const { error: updateError } = await supabase.rpc('increment_post_comments', {
-        post_id: postId
-      });
+      // Enrich comment with user data
+      const userData = await this.getUserData(comment.user_id);
+      const enrichedComment = {
+        ...comment,
+        user_profile: userData
+      };
+
+      // Update comments count only for top-level comments
+      if (!parentId) {
+        const { data: currentPost } = await supabase
+          .from('posts')
+          .select('comments_count')
+          .eq('id', postId)
+          .single();
+
+        if (currentPost) {
+          const { error: updateError } = await supabase
+            .from('posts')
+            .update({ 
+              comments_count: (currentPost.comments_count || 0) + 1
+            })
+            .eq('id', postId);
 
       if (updateError) {
         console.error('Error updating comments count:', updateError);
-        // Don't throw here as the comment was added successfully
+          }
+        }
       }
 
-      return comment;
+      return enrichedComment;
     } catch (error) {
       console.error('Failed to add comment:', error);
       throw new Error(`Comment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  static async addReply(commentId: string, userId: string, content: string): Promise<PostComment> {
+    try {
+      // Get the parent comment to find the post_id
+      const { data: parentComment } = await supabase
+        .from('post_comments')
+        .select('post_id')
+        .eq('id', commentId)
+        .single();
+
+      if (!parentComment) {
+        throw new Error('Parent comment not found');
+      }
+
+      // Add the reply
+      return await this.addComment(parentComment.post_id, userId, content, commentId);
+    } catch (error) {
+      console.error('Failed to add reply:', error);
+      throw new Error(`Reply failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  static async getCommentReplies(commentId: string): Promise<PostComment[]> {
+    try {
+      const { data: replies, error } = await supabase
+        .from('post_comments')
+        .select('*')
+        .eq('parent_id', commentId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching replies:', error);
+        throw error;
+      }
+
+      // Enrich replies with user data
+      const enrichedReplies = await Promise.all(
+        (replies || []).map(async (reply) => {
+          const userData = await this.getUserData(reply.user_id);
+          return {
+            ...reply,
+            user_profile: userData
+          };
+        })
+      );
+
+      return enrichedReplies;
+    } catch (error) {
+      console.error('Failed to get replies:', error);
+      throw new Error(`Failed to fetch replies: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -366,7 +571,7 @@ export class PostService {
         .select('post_id')
         .eq('id', commentId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (!comment) {
         throw new Error('Comment not found or no permission to delete');
@@ -384,18 +589,66 @@ export class PostService {
         throw error;
       }
 
-      // Update comments count
-      const { error: updateError } = await supabase.rpc('decrement_post_comments', {
-        post_id: comment.post_id
-      });
+      // Update comments count directly (fallback if trigger doesn't work)
+      const { data: currentPost } = await supabase
+        .from('posts')
+        .select('comments_count')
+        .eq('id', comment.post_id)
+        .single();
+
+      if (currentPost) {
+        const { error: updateError } = await supabase
+          .from('posts')
+          .update({ 
+            comments_count: Math.max((currentPost.comments_count || 0) - 1, 0)
+          })
+          .eq('id', comment.post_id);
 
       if (updateError) {
         console.error('Error updating comments count:', updateError);
         // Don't throw here as the comment was deleted successfully
+        }
       }
     } catch (error) {
       console.error('Failed to delete comment:', error);
       throw new Error(`Comment deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  static async editComment(commentId: string, content: string, userId: string): Promise<void> {
+    try {
+      // First, check if the comment exists and belongs to the user
+      const { data: comment, error: fetchError } = await supabase
+        .from('post_comments')
+        .select('*')
+        .eq('id', commentId)
+        .eq('user_id', userId)
+        .single();
+
+      if (fetchError || !comment) {
+        console.error('Error fetching comment:', fetchError);
+        throw new Error('Comment not found or no permission to edit');
+      }
+
+      // Update the comment
+      const { error: updateError } = await supabase
+        .from('post_comments')
+        .update({
+          content: content,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', commentId)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        console.error('Error updating comment:', updateError);
+        throw new Error('Failed to update comment');
+      }
+
+      console.log('Comment updated successfully');
+    } catch (error) {
+      console.error('Failed to edit comment:', error);
+      throw new Error(`Failed to edit comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

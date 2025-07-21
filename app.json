@@ -31,7 +31,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.christianbalais06.Samprtc",
       "androidNavigationBar": {
-        "visible": "immersive"
+        "visible": "leanback"
       },
       "permissions": [
         "android.permission.CAMERA",

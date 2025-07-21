@@ -10,36 +10,11 @@ import { useViewport } from '../src/hooks/useViewport';
 import { DiscoveryFilters, MatchingService } from '../src/services/matching';
 import { Profile } from '../src/types';
 import { calculateAge } from '../src/utils/dateUtils';
+import { formatLocationForDisplay } from '../src/utils/location';
 import { useTheme } from '../src/utils/themes';
 
 const { width, height } = Dimensions.get('window');
 
-// Helper function to parse location to city/state format
-const formatLocation = (location: string | null | undefined): string => {
-  if (!location) return 'Location not set';
-  
-  // Remove specific addresses and keep only city and state
-  const locationParts = location.split(',').map(part => part.trim());
-  
-  // If it looks like "City, State" or "City, State, Country"
-  if (locationParts.length >= 2) {
-    const city = locationParts[0];
-    const stateOrCountry = locationParts[1];
-    
-    // Check if the second part looks like a US state (2 letters) or state name
-    const usStatePattern = /^[A-Z]{2}$|^(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)$/i;
-    
-    if (usStatePattern.test(stateOrCountry)) {
-      return `${city}, ${stateOrCountry.toUpperCase()}`;
-    }
-    
-    // For non-US locations, just return city and country/region
-    return `${city}, ${stateOrCountry}`;
-  }
-  
-  // Fallback to original location
-  return location;
-};
 
 export default function DiscoverScreen() {
   const theme = useTheme();
@@ -95,7 +70,12 @@ export default function DiscoverScreen() {
   // Pan responder for swipe gestures
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => !processingAction && !showDetailModal,
-    onMoveShouldSetPanResponder: () => !processingAction && !showDetailModal,
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      // Only activate pan responder if there's significant movement
+      const moveThreshold = 10;
+      return !processingAction && !showDetailModal && 
+        (Math.abs(gesture.dx) > moveThreshold || Math.abs(gesture.dy) > moveThreshold);
+    },
     
     onPanResponderGrant: () => {
       position.setOffset({
@@ -311,13 +291,19 @@ export default function DiscoverScreen() {
   }, [currentIndex, profiles, processingAction]);
 
   const handlePhotoNavigation = (direction: 'next' | 'prev') => {
-    const currentProfile = profiles[currentIndex];
-    if (!currentProfile?.photos) return;
+    if (!displayedProfile?.photos) return;
     
-    if (direction === 'next' && currentPhotoIndex < currentProfile.photos.length - 1) {
-      setCurrentPhotoIndex(prev => prev + 1);
-    } else if (direction === 'prev' && currentPhotoIndex > 0) {
-      setCurrentPhotoIndex(prev => prev - 1);
+    const newIndex = direction === 'next' 
+      ? (currentPhotoIndex + 1) % displayedProfile.photos.length
+      : (currentPhotoIndex - 1 + displayedProfile.photos.length) % displayedProfile.photos.length;
+    
+    setCurrentPhotoIndex(newIndex);
+  };
+
+  const handleProfileClick = () => {
+    console.log('Profile clicked:', displayedProfile?.user_id);
+    if (displayedProfile?.user_id) {
+              router.push(`/user-profile/${displayedProfile.user_id}`);
     }
   };
 
@@ -476,10 +462,27 @@ export default function DiscoverScreen() {
           ]}
           {...panResponder.panHandlers}
         >
-          <ListItem style={[styles.profileCard, { 
+          <TouchableOpacity
+            onPress={handleProfileClick}
+            activeOpacity={0.9}
+            delayPressIn={0}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ 
+              width: '100%',
+              // Add subtle visual feedback for mobile
+              ...(isMobile && {
+                shadowColor: theme.colors.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+              })
+            }}
+          >
+            <ListItem style={[styles.profileCard, { 
             maxWidth: isMobile ? '100%' : Math.min(400, viewportWidth * 0.4),
             alignSelf: 'center'
-          }]} padding="small">
+            }]} padding="small">
             <View style={styles.imageContainer}>
               <Image
                 source={{ uri: currentPhoto }}
@@ -511,12 +514,18 @@ export default function DiscoverScreen() {
                 <>
                   <TouchableOpacity
                     style={[styles.photoNavArea, styles.photoNavLeft]}
-                    onPress={() => handlePhotoNavigation('prev')}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handlePhotoNavigation('prev');
+                      }}
                     activeOpacity={0.7}
                   />
                   <TouchableOpacity
                     style={[styles.photoNavArea, styles.photoNavRight]}
-                    onPress={() => handlePhotoNavigation('next')}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handlePhotoNavigation('next');
+                      }}
                     activeOpacity={0.7}
                   />
                 </>
@@ -525,7 +534,10 @@ export default function DiscoverScreen() {
               {/* Profile info button */}
               <TouchableOpacity
                 style={styles.infoButton}
-                onPress={() => setShowDetailModal(true)}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setShowDetailModal(true);
+                  }}
               >
                 <MaterialIcon name={IconNames.info} size={20} color="white" />
               </TouchableOpacity>
@@ -539,10 +551,18 @@ export default function DiscoverScreen() {
                 {displayedProfile.is_online && (
                   <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
                 )}
+                  {isMobile && (
+                    <MaterialIcon 
+                      name={IconNames.forward} 
+                      size={16} 
+                      color={theme.colors.textSecondary} 
+                      style={{ marginLeft: 'auto' }}
+                    />
+                  )}
               </View>
               
               <Text style={[styles.profileLocation, { color: theme.colors.textSecondary }]}>
-                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> {formatLocation(displayedProfile.location)}
+                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> {formatLocationForDisplay(displayedProfile.location, 'city-state')}
               </Text>
               
               {displayedProfile.bio && (
@@ -573,7 +593,8 @@ export default function DiscoverScreen() {
                 </View>
               )}
             </View>
-          </ListItem>
+            </ListItem>
+          </TouchableOpacity>
         </Animated.View>
       </View>
 
@@ -630,7 +651,7 @@ export default function DiscoverScreen() {
               </Text>
               
               <Text style={[styles.modalLocation, { color: theme.colors.textSecondary }]}>
-                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> {formatLocation(displayedProfile.location)}
+                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> {formatLocationForDisplay(displayedProfile.location, 'city-state')}
               </Text>
               
               {displayedProfile.bio && (

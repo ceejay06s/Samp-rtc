@@ -1,15 +1,6 @@
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
@@ -18,6 +9,7 @@ import { SingleSlider } from '../src/components/ui/Slider';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
 import { AuthService, ProfileUpdateData } from '../src/services/auth';
+import { formatLocationForDisplay } from '../src/utils/location';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
 
@@ -145,44 +137,24 @@ export default function PreferencesScreen() {
     return getResponsiveSpacing(size);
   };
 
-  // Format location to show only city and state
+  // Format location to show city, state, country
   const formatLocationDisplay = (location?: string, latitude?: number, longitude?: number): string => {
     if (!location && (!latitude || !longitude)) {
       return 'Location not available';
     }
 
     if (location) {
-      // Parse the location string to extract city and state
-      // Common formats: "City, State, Country" or "Street, City, State, Country"
+      // Parse the location string to extract city, state, country
       const parts = location.split(',').map(part => part.trim());
       
-      if (parts.length >= 2) {
-        // Find the state part (usually contains state abbreviation or full name)
-        // Look for the last part that looks like a state (2-3 chars or common state names)
-        const statePattern = /^[A-Z]{2}$|^(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)$/i;
-        
-        for (let i = parts.length - 1; i >= 0; i--) {
-          if (statePattern.test(parts[i])) {
-            // Found state, get city (usually the part before state)
-            const stateIndex = i;
-            const cityIndex = stateIndex - 1;
-            
-            if (cityIndex >= 0) {
-              return `${parts[cityIndex]}, ${parts[stateIndex]}`;
+      // Return city, state, country if available
+      if (parts.length >= 3) {
+        return `${parts[0]}, ${parts[1]}, ${parts[2]}`;
+      } else if (parts.length === 2) {
+        return `${parts[0]}, ${parts[1]}`;
             } else {
-              return parts[stateIndex]; // Just state if no city found
-            }
-          }
-        }
-        
-        // Fallback: assume last two parts are city and state/country
-        if (parts.length >= 2) {
-          return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
-        }
-      }
-      
-      // Fallback: return first part if parsing fails
       return parts[0] || location;
+      }
     }
 
     // Fallback to coordinates if location string is not available
@@ -753,7 +725,7 @@ export default function PreferencesScreen() {
                 </Text>
                 {currentProfile?.latitude && currentProfile?.longitude && (
                   <Text style={[styles.currentLocationText, { color: theme.colors.textSecondary }]}>
-                    📍 Current: {formatLocationDisplay(currentProfile.location, currentProfile.latitude, currentProfile.longitude)}
+                    📍 Current: {formatLocationForDisplay(currentProfile.location)}
                   </Text>
                 )}
               </View>

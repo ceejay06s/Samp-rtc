@@ -6,6 +6,7 @@ import { Card } from '../src/components/ui/Card';
 import { WebAlert } from '../src/components/ui/WebAlert';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { calculateAge } from '../src/utils/dateUtils';
+import { formatLocationForDisplay } from '../src/utils/location';
 import { isDesktopBrowser } from '../src/utils/platform';
 import { getResponsiveFontSize, getResponsiveSpacing, isBreakpoint } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
@@ -120,7 +121,7 @@ export default function MenuScreen() {
       key: 'account',
       title: 'Account Settings',
       subtitle: 'Manage your account and security',
-      icon: '⚙️',
+      icon: '☰',
       action: 'navigate',
       route: '/account',
     },
@@ -174,6 +175,14 @@ export default function MenuScreen() {
       icon: 'ℹ️',
       action: 'alert',
       onPress: () => Alert.alert('About', 'Spark Dating App v1.0\nFind your perfect match!'),
+    },
+    {
+      key: 'bucket-test',
+      title: 'Bucket Connection Test',
+      subtitle: 'Test storage bucket connectivity',
+      icon: '🪣',
+      action: 'navigate',
+      route: '/bucket-test',
     },
   ];
 
@@ -271,7 +280,7 @@ export default function MenuScreen() {
     return (
       <TouchableOpacity 
         style={[styles.userProfileCard, { backgroundColor: theme.colors.surface }]}
-        onPress={() => router.push(`/user-profile?userId=${user?.id}`)}
+        onPress={() => router.push(`/user-profile/${user?.id}`)}
         activeOpacity={0.8}
       >
         <View style={styles.userProfileContent}>
@@ -306,7 +315,7 @@ export default function MenuScreen() {
               isDesktop && { fontSize: getDesktopFontSize('sm') }
             ]}>
               {profile.birthdate ? `${calculateAge(profile.birthdate)} years old` : 'Age not set'}
-              {profile.location && ` • ${profile.location}`}
+              {profile.location && ` • ${formatLocationForDisplay(profile.location, 'city-state')}`}
             </Text>
             
             {profile.bio && (

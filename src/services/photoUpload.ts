@@ -313,7 +313,7 @@ export class PhotoUploadService {
       // Step 4: Upload to Supabase Storage
       console.log('Step 4: Uploading to Supabase storage...');
       const { data, error } = await supabase.storage
-        .from('profile-photos')
+        .from('profile-photo')
         .upload(fileName, blob, {
           contentType: photo.type,
           cacheControl: '3600',
@@ -348,7 +348,7 @@ export class PhotoUploadService {
       // Step 5: Get the public URL
       console.log('Step 5: Getting public URL...');
       const { data: urlData } = supabase.storage
-        .from('profile-photos')
+        .from('profile-photo')
         .getPublicUrl(fileName);
 
       const publicUrl = urlData.publicUrl;
@@ -418,7 +418,7 @@ export class PhotoUploadService {
       console.log('Deleting photo from Supabase:', filePath);
 
       const { error } = await supabase.storage
-        .from('profile-photos')
+        .from('profile-photo')
         .remove([filePath]);
 
       if (error) {
@@ -455,8 +455,8 @@ export class PhotoUploadService {
   }
 
   static validateImage(photo: PhotoUploadResult): { isValid: boolean; error?: string } {
-    // Check file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    // Check file size (max 50MB to match bucket limit)
+    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
     
     // Check dimensions (minimum 300x400)
     const minWidth = 300;
@@ -469,15 +469,11 @@ export class PhotoUploadService {
       };
     }
 
-    // Check aspect ratio (should be close to 3:4)
-    const aspectRatio = photo.width / photo.height;
-    const targetAspectRatio = 3 / 4;
-    const tolerance = 0.1;
-
-    if (Math.abs(aspectRatio - targetAspectRatio) > tolerance) {
+    // Check if image is portrait (height > width) - more flexible than strict 3:4
+    if (photo.height <= photo.width) {
       return {
         isValid: false,
-        error: 'Image should have a 3:4 aspect ratio (portrait orientation)',
+        error: 'Image should be in portrait orientation (taller than wide)',
       };
     }
 
@@ -520,19 +516,19 @@ export class PhotoUploadService {
         throw new Error(`Failed to check storage buckets: ${listError.message}`);
       }
       
-      const bucketExists = buckets?.some(bucket => bucket.name === 'profile-photos');
+      const bucketExists = buckets?.some(bucket => bucket.name === 'profile-photo');
       
       if (!bucketExists) {
-        console.warn('Profile photos bucket does not exist. Please run the SQL setup script.');
+        console.warn('Profile photo bucket does not exist. Please run the SQL setup script.');
         console.warn('Run this in your Supabase SQL editor: sql/fix-storage-bucket.sql');
-        throw new Error('Storage bucket "profile-photos" does not exist. Please run the setup script.');
+        throw new Error('Storage bucket "profile-photo" does not exist. Please run the setup script.');
       }
       
-      console.log('Storage bucket "profile-photos" exists and is accessible');
+      console.log('Storage bucket "profile-photo" exists and is accessible');
       
       // Test bucket access by trying to list files
       const { data: files, error: listFilesError } = await supabase.storage
-        .from('profile-photos')
+        .from('profile-photo')
         .list('', { limit: 1 });
       
       if (listFilesError) {
@@ -623,14 +619,14 @@ export class PhotoUploadService {
           console.log('✓ Storage is available');
           console.log('Available buckets:', buckets?.map(b => b.name) || []);
           
-          const profilePhotosBucket = buckets?.find(b => b.name === 'profile-photos');
-          results.bucketExists = !!profilePhotosBucket;
+          const profilePhotoBucket = buckets?.find(b => b.name === 'profile-photo');
+          results.bucketExists = !!profilePhotoBucket;
           
-          if (profilePhotosBucket) {
-            console.log('✓ Profile photos bucket found');
+          if (profilePhotoBucket) {
+            console.log('✓ Profile photo bucket found');
           } else {
-            results.errors.push('Profile photos bucket not found');
-            console.error('✗ Profile photos bucket not found');
+            results.errors.push('Profile photo bucket not found');
+            console.error('✗ Profile photo bucket not found');
           }
         }
       } catch (storageError) {
@@ -644,7 +640,7 @@ export class PhotoUploadService {
       if (results.bucketExists) {
         console.log('3. Testing bucket access...');
         const { data: files, error: accessError } = await supabase.storage
-          .from('profile-photos')
+          .from('profile-photo')
           .list('', { limit: 1 });
         
         if (accessError) {
@@ -668,7 +664,7 @@ export class PhotoUploadService {
           console.log('Attempting to upload test file:', testFileName);
           
           const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('profile-photos')
+            .from('profile-photo')
             .upload(testFileName, blob, {
               contentType: 'image/png',
               cacheControl: '3600',
@@ -685,7 +681,7 @@ export class PhotoUploadService {
 
             // Clean up test file
             const { error: deleteError } = await supabase.storage
-              .from('profile-photos')
+              .from('profile-photo')
               .remove([testFileName]);
             
             if (deleteError) {

@@ -102,6 +102,39 @@ CREATE TABLE user_interests (
   UNIQUE(user_id, interest_id)
 );
 
+-- Posts table
+CREATE TABLE posts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  images TEXT[] DEFAULT '{}',
+  is_public BOOLEAN DEFAULT true,
+  location TEXT,
+  likes_count INTEGER DEFAULT 0 CHECK (likes_count >= 0),
+  comments_count INTEGER DEFAULT 0 CHECK (comments_count >= 0),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Post likes table
+CREATE TABLE post_likes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(post_id, user_id)
+);
+
+-- Post comments table
+CREATE TABLE post_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Match interactions table (for tracking engagement)
 CREATE TABLE match_interactions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -141,6 +174,19 @@ CREATE INDEX idx_likes_created_at ON likes(created_at);
 CREATE INDEX idx_user_interests_user_id ON user_interests(user_id);
 CREATE INDEX idx_user_interests_interest_id ON user_interests(interest_id);
 
+CREATE INDEX idx_posts_user_id ON posts(user_id);
+CREATE INDEX idx_posts_created_at ON posts(created_at);
+CREATE INDEX idx_posts_public ON posts(is_public);
+CREATE INDEX idx_posts_location ON posts(location);
+
+CREATE INDEX idx_post_likes_post_id ON post_likes(post_id);
+CREATE INDEX idx_post_likes_user_id ON post_likes(user_id);
+CREATE INDEX idx_post_likes_created_at ON post_likes(created_at);
+
+CREATE INDEX idx_post_comments_post_id ON post_comments(post_id);
+CREATE INDEX idx_post_comments_user_id ON post_comments(user_id);
+CREATE INDEX idx_post_comments_created_at ON post_comments(created_at);
+
 CREATE INDEX idx_match_interactions_match_id ON match_interactions(match_id);
 CREATE INDEX idx_match_interactions_user_id ON match_interactions(user_id);
 
@@ -153,6 +199,11 @@ ALTER TABLE voice_calls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_interests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE match_interactions ENABLE ROW LEVEL SECURITY;
+
+-- Enable Row Level Security for posts tables
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_comments ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
@@ -271,6 +322,45 @@ CREATE POLICY "Users can view interactions for their matches" ON match_interacti
 CREATE POLICY "Users can insert their interactions" ON match_interactions
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+-- Posts policies
+CREATE POLICY "Users can view public posts" ON posts
+  FOR SELECT USING (is_public = true);
+
+CREATE POLICY "Users can view their own posts" ON posts
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create their own posts" ON posts
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own posts" ON posts
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own posts" ON posts
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Post likes policies
+CREATE POLICY "Users can view all post likes" ON post_likes
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can create their own post likes" ON post_likes
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own post likes" ON post_likes
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Post comments policies
+CREATE POLICY "Users can view all post comments" ON post_comments
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can create their own post comments" ON post_comments
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own post comments" ON post_comments
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own post comments" ON post_comments
+  FOR DELETE USING (auth.uid() = user_id);
+
 -- Functions for common operations
 
 -- Function to update updated_at timestamp
@@ -291,6 +381,54 @@ CREATE TRIGGER update_matches_updated_at BEFORE UPDATE ON matches
 
 CREATE TRIGGER update_conversations_updated_at BEFORE UPDATE ON conversations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create triggers for posts tables
+CREATE TRIGGER update_posts_updated_at
+  BEFORE UPDATE ON posts
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_post_comments_updated_at
+  BEFORE UPDATE ON post_comments
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to update post likes count
+CREATE OR REPLACE FUNCTION update_post_likes_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE posts SET likes_count = likes_count + 1 WHERE id = NEW.post_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE posts SET likes_count = likes_count - 1 WHERE id = OLD.post_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update post comments count
+CREATE OR REPLACE FUNCTION update_post_comments_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE posts SET comments_count = comments_count + 1 WHERE id = NEW.post_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE posts SET comments_count = comments_count - 1 WHERE id = OLD.post_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for post counts
+CREATE TRIGGER update_post_likes_count_trigger
+  AFTER INSERT OR DELETE ON post_likes
+  FOR EACH ROW EXECUTE FUNCTION update_post_likes_count();
+
+CREATE TRIGGER update_post_comments_count_trigger
+  AFTER INSERT OR DELETE ON post_comments
+  FOR EACH ROW EXECUTE FUNCTION update_post_comments_count();
 
 -- Function to create conversation when match is created
 CREATE OR REPLACE FUNCTION create_conversation_for_match()

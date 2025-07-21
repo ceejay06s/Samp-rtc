@@ -2,6 +2,7 @@ import { router, usePathname } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../../lib/AuthContext';
+import { config } from '../../../lib/config';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
 import { IconNames, MaterialIcon } from './MaterialIcon';
@@ -26,6 +27,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [widthAnim] = useState(new Animated.Value(240));
   const [opacityAnim] = useState(new Animated.Value(1));
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   // Ensure animations are properly initialized
   useEffect(() => {
@@ -63,7 +65,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
     {
       key: 'menu',
       title: 'Menu',
-      icon: 'settings',
+      icon: 'menu',
       route: '/menu',
     },
   ];
@@ -79,7 +81,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
     
     Animated.parallel([
       Animated.timing(widthAnim, {
-        toValue: newCollapsed ? 80 : 240,
+        toValue: newCollapsed ? 60 : 240,
         duration: 300,
         useNativeDriver: false,
       }),
@@ -126,19 +128,35 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
       style
     ]}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: currentColors.border }]}>
-        <Animated.View style={[styles.headerContent, { opacity: opacityAnim }]}>
-          <Text style={[styles.title, { color: currentColors.text }]}>
-            Dating App
-          </Text>
-        </Animated.View>
+      <View style={[
+        styles.header, 
+        isCollapsed && styles.headerCollapsed,
+        { 
+          borderBottomColor: currentColors.border,
+          justifyContent: isCollapsed ? 'center' : 'space-between',
+          paddingHorizontal: isCollapsed ? 0 : getResponsiveSpacing('md'),
+        }
+      ]}>
+        {!isCollapsed && (
+          <Animated.View style={[styles.headerContent, { opacity: opacityAnim }]}>
+            <Text style={[styles.title, { color: currentColors.text }]}>
+              Dating App
+            </Text>
+          </Animated.View>
+        )}
         <TouchableOpacity
-          style={[styles.collapseButton, { backgroundColor: currentColors.background }]}
+          style={[
+            styles.collapseButton, 
+            isCollapsed && styles.collapseButtonCollapsed,
+            { 
+              backgroundColor: currentColors.background,
+            }
+          ]}
           onPress={handleToggleCollapse}
         >
           <MaterialIcon
             name={isCollapsed ? IconNames.forward : IconNames.back}
-            size={20}
+            size={isCollapsed ? 16 : 20}
             color={currentColors.textSecondary}
           />
         </TouchableOpacity>
@@ -155,52 +173,118 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
               style={[
                 styles.navItem,
                 isActive && [styles.navItemActive, { backgroundColor: currentColors.primary + '20' }],
+                isCollapsed && styles.navItemCollapsed,
               ]}
               onPress={() => handleTabPress(item)}
+              {...(Platform.OS === 'web' && {
+                onMouseEnter: () => isCollapsed && setHoveredItem(item.key),
+                onMouseLeave: () => setHoveredItem(null),
+              })}
             >
-              <View style={styles.iconContainer}>
+              <View style={[
+                styles.iconContainer,
+                isCollapsed && styles.iconContainerCollapsed
+              ]}>
                 <MaterialIcon
                   name={IconNames[item.icon]}
                   size={24}
                   color={isActive ? currentColors.primary : currentColors.textSecondary}
                 />
                 {item.badge && item.badge > 0 && (
-                  <View style={[styles.badge, { backgroundColor: currentColors.primary }]}>
+                  <View style={[
+                    styles.badge, 
+                    { backgroundColor: currentColors.primary },
+                    isCollapsed && styles.badgeCollapsed
+                  ]}>
                     <Text style={[styles.badgeText, { color: 'white' }]}>
                       {item.badge > 99 ? '99+' : item.badge}
                     </Text>
                   </View>
                 )}
               </View>
-              <Animated.View style={[styles.labelContainer, { opacity: opacityAnim }]}>
-                <Text style={[
-                  styles.navLabel,
-                  { color: isActive ? currentColors.primary : currentColors.textSecondary }
-                ]}>
-                  {item.title}
-                </Text>
-              </Animated.View>
+              {!isCollapsed && (
+                <Animated.View style={[styles.labelContainer, { opacity: opacityAnim }]}>
+                  <Text style={[
+                    styles.navLabel,
+                    { color: isActive ? currentColors.primary : currentColors.textSecondary }
+                  ]}>
+                    {item.title}
+                  </Text>
+                </Animated.View>
+              )}
             </TouchableOpacity>
           );
         })}
       </View>
 
+      {/* Tooltip for collapsed state */}
+      {isCollapsed && hoveredItem && Platform.OS === 'web' && (
+        <View style={[
+          styles.tooltip,
+          { 
+            backgroundColor: currentColors.surface,
+            borderColor: currentColors.border,
+          }
+        ]}>
+          <Text style={[styles.tooltipText, { color: currentColors.text }]}>
+            {sidebarItems.find(item => item.key === hoveredItem)?.title}
+          </Text>
+        </View>
+      )}
+
+      {/* Version Number */}
+      <View style={[
+        styles.versionContainer,
+        { 
+          borderTopColor: currentColors.border,
+          padding: isCollapsed ? getResponsiveSpacing('xs') : getResponsiveSpacing('sm'),
+        }
+      ]}>
+        {!isCollapsed && (
+          <Animated.View style={[styles.versionText, { opacity: opacityAnim }]}>
+            <Text style={[styles.versionLabel, { color: currentColors.textSecondary }]}>
+              v{config.app.version}
+            </Text>
+          </Animated.View>
+        )}
+        {isCollapsed && (
+          <Text style={[styles.versionLabelCollapsed, { color: currentColors.textSecondary }]}>
+            v{config.app.version.split('.').slice(0, 2).join('.')}
+          </Text>
+        )}
+      </View>
+
       {/* Sign Out Button */}
-      <View style={[styles.footer, { borderTopColor: currentColors.border }]}>
+      <View style={[
+        styles.footer, 
+        isCollapsed && styles.footerCollapsed,
+        { 
+          borderTopColor: currentColors.border,
+        }
+      ]}>
         <TouchableOpacity
-          style={[styles.signOutButton, { backgroundColor: currentColors.primary }]}
+          style={[
+            styles.signOutButton, 
+            isCollapsed && styles.signOutButtonCollapsed,
+            { 
+              backgroundColor: currentColors.primary,
+              justifyContent: isCollapsed ? 'center' : 'flex-start',
+            }
+          ]}
           onPress={handleSignOut}
         >
           <MaterialIcon
             name={IconNames.logout}
-            size={20}
+            size={isCollapsed ? 16 : 20}
             color="white"
           />
-          <Animated.View style={[styles.signOutLabelContainer, { opacity: opacityAnim }]}>
-            <Text style={styles.signOutLabel}>
-              Sign Out
-            </Text>
-          </Animated.View>
+          {!isCollapsed && (
+            <Animated.View style={[styles.signOutLabelContainer, { opacity: opacityAnim }]}>
+              <Text style={styles.signOutLabel}>
+                Sign Out
+              </Text>
+            </Animated.View>
+          )}
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -229,7 +313,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: getResponsiveSpacing('md'),
     borderBottomWidth: 1,
-    minHeight: 60,
+    minHeight: 50,
+  },
+  headerCollapsed: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 0,
   },
   headerContent: {
     flex: 1,
@@ -246,9 +335,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  collapseButtonCollapsed: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   nav: {
     flex: 1,
-    paddingVertical: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
   },
   navItem: {
     flexDirection: 'row',
@@ -257,17 +353,35 @@ const styles = StyleSheet.create({
     paddingVertical: getResponsiveSpacing('sm'),
     marginHorizontal: getResponsiveSpacing('sm'),
     borderRadius: 8,
-    minHeight: 48,
+    minHeight: 40,
   },
   navItemActive: {
     borderLeftWidth: 3,
     borderLeftColor: 'transparent', // This will be overridden by the inline style
+  },
+  navItemCollapsed: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: getResponsiveSpacing('xs'),
+    marginHorizontal: 0,
+    width: '100%',
+    minHeight: 36,
   },
   iconContainer: {
     position: 'relative',
     marginRight: getResponsiveSpacing('md'),
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconContainerCollapsed: {
+    marginRight: 0,
+    marginBottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 24,
+    height: 24,
   },
   labelContainer: {
     flex: 1,
@@ -292,9 +406,63 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFontSize('xs'),
     fontWeight: 'bold',
   },
+  badgeCollapsed: {
+    top: -4,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+  },
+  tooltip: {
+    position: 'absolute' as any,
+    left: 70,
+    top: 0,
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('xs'),
+    borderRadius: 6,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1001,
+  },
+  tooltipText: {
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: '500',
+  },
   footer: {
     padding: getResponsiveSpacing('md'),
     borderTopWidth: 1,
+    minHeight: 50,
+  },
+  footerCollapsed: {
+    padding: getResponsiveSpacing('xs'),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  versionContainer: {
+    borderTopWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 30,
+  },
+  versionText: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  versionLabel: {
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  versionLabelCollapsed: {
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: '400',
+    textAlign: 'center',
   },
   signOutButton: {
     flexDirection: 'row',
@@ -302,7 +470,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: getResponsiveSpacing('md'),
     paddingVertical: getResponsiveSpacing('sm'),
     borderRadius: 8,
-    minHeight: 40,
+    minHeight: 36,
+  },
+  signOutButtonCollapsed: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: getResponsiveSpacing('xs'),
+    minHeight: 36,
+    width: '100%',
   },
   signOutLabelContainer: {
     flex: 1,

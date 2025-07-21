@@ -3,7 +3,7 @@ export const config = {
   // Supabase
   supabase: {
     url: process.env.EXPO_PUBLIC_SUPABASE_URL!,
-    anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+    anonKey: process.env.EXPO_PUBLIC_SUPABASE_KEY!,
   },
   
   // App
@@ -35,7 +35,7 @@ export const config = {
 export function validateConfig() {
   const requiredVars = [
     'EXPO_PUBLIC_SUPABASE_URL',
-    'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+    'EXPO_PUBLIC_SUPABASE_KEY',
   ]
 
   const missing = requiredVars.filter(varName => !process.env[varName])

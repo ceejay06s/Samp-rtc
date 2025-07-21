@@ -12,7 +12,7 @@ function RootLayoutContent() {
 
   return (
     <>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar hidden={true} />
       <View style={styles.container}>
         {/* Desktop Sidebar - only show on desktop web browsers when logged in */}
         {platform.isDesktopBrowser && user && (

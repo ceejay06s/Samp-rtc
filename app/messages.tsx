@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Platform,
@@ -15,34 +14,14 @@ import {
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
+import { IconNames, MaterialIcon } from '../src/components/ui/MaterialIcon';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
 import { MessagingService } from '../src/services/messaging';
 import { Conversation } from '../src/types';
+import { formatLocationForDisplay } from '../src/utils/location';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
-
-// Helper function to parse location to city/state format
-const formatLocation = (location: string | null | undefined): string => {
-  if (!location) return '';
-  
-  const locationParts = location.split(',').map(part => part.trim());
-  
-  if (locationParts.length >= 2) {
-    const city = locationParts[0];
-    const stateOrCountry = locationParts[1];
-    
-    const usStatePattern = /^[A-Z]{2}$|^(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming)$/i;
-    
-    if (usStatePattern.test(stateOrCountry)) {
-      return `${city}, ${stateOrCountry.toUpperCase()}`;
-    }
-    
-    return `${city}, ${stateOrCountry}`;
-  }
-  
-  return location;
-};
 
 // Helper function to format timestamp
 const formatMessageTime = (timestamp: Date | string): string => {
@@ -108,21 +87,8 @@ export default function MessagesScreen() {
   }, [loadConversations]);
 
   const handleConversationPress = (conversation: Conversation) => {
-    // For now, show an alert since individual chat screen might not exist
-    const otherProfile = conversation.otherProfile;
-    if (otherProfile) {
-      Alert.alert(
-        `Chat with ${otherProfile.first_name}`,
-        'Individual chat feature will be available soon!',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Mark as Read', 
-            onPress: () => handleMarkAsRead(conversation)
-          }
-        ]
-      );
-    }
+    // Navigate to the chat screen with the conversation ID
+    router.push(`/chat/${conversation.id}`);
   };
 
   const handleMarkAsRead = async (conversation: Conversation) => {
@@ -258,6 +224,7 @@ export default function MessagesScreen() {
         ]}
         onPress={() => handleConversationPress(conversation)}
         activeOpacity={0.7}
+        hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
       >
         <View style={styles.avatarContainer}>
           <Image
@@ -316,12 +283,13 @@ export default function MessagesScreen() {
             </Text>
           </View>
 
-          {formatLocation(otherProfile.location) && (
+          {formatLocationForDisplay(otherProfile.location, 'city-state') && (
             <Text style={[styles.location, { color: theme.colors.textSecondary }]}>
-              📍 {formatLocation(otherProfile.location)}
+              📍 {formatLocationForDisplay(otherProfile.location, 'city-state')}
             </Text>
           )}
         </View>
+        <MaterialIcon name={IconNames.forward} size={20} color={theme.colors.textSecondary} />
       </TouchableOpacity>
     );
   };
@@ -526,6 +494,7 @@ const styles = StyleSheet.create({
   },
   conversationItem: {
     flexDirection: 'row',
+    alignItems: 'center',
     padding: getResponsiveSpacing('md'),
     borderRadius: 12,
     marginBottom: getResponsiveSpacing('xs'),

@@ -4,20 +4,20 @@
 -- Check if bucket exists first
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE name = 'profile-photos') THEN
+  IF NOT EXISTS (SELECT 1 FROM storage.buckets WHERE name = 'profile-photo') THEN
     -- Create the bucket
     INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
     VALUES (
-      gen_random_uuid(), 
-      'profile-photos', 
+      'profile-photo', -- Use bucket name as ID (same as manual creation)
+      'profile-photo', 
       true, 
-      10485760, -- 10MB limit
+      52428800, -- 50MB limit (50 * 1024 * 1024)
       ARRAY['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
     );
     
-    RAISE NOTICE 'Storage bucket "profile-photos" created successfully';
+    RAISE NOTICE 'Storage bucket "profile-photo" created successfully';
   ELSE
-    RAISE NOTICE 'Storage bucket "profile-photos" already exists';
+    RAISE NOTICE 'Storage bucket "profile-photo" already exists';
   END IF;
 END $$;
 
@@ -29,7 +29,7 @@ SELECT
   allowed_mime_types,
   created_at
 FROM storage.buckets 
-WHERE name = 'profile-photos';
+WHERE name = 'profile-photo';
 
 -- Create basic storage policies if they don't exist
 DO $$
@@ -43,7 +43,7 @@ BEGIN
   ) THEN
     CREATE POLICY "Users can upload their own profile photos" ON storage.objects
     FOR INSERT WITH CHECK (
-      bucket_id = 'profile-photos' AND
+      bucket_id = 'profile-photo' AND
       auth.uid()::text = split_part(name, '/', 1)
     );
     RAISE NOTICE 'Upload policy created';
@@ -57,7 +57,7 @@ BEGIN
     AND policyname = 'Users can view all profile photos'
   ) THEN
     CREATE POLICY "Users can view all profile photos" ON storage.objects
-    FOR SELECT USING (bucket_id = 'profile-photos');
+    FOR SELECT USING (bucket_id = 'profile-photo');
     RAISE NOTICE 'View policy created';
   END IF;
 
@@ -70,7 +70,7 @@ BEGIN
   ) THEN
     CREATE POLICY "Users can update their own profile photos" ON storage.objects
     FOR UPDATE USING (
-      bucket_id = 'profile-photos' AND
+      bucket_id = 'profile-photo' AND
       auth.uid()::text = split_part(name, '/', 1)
     );
     RAISE NOTICE 'Update policy created';
@@ -85,7 +85,7 @@ BEGIN
   ) THEN
     CREATE POLICY "Users can delete their own profile photos" ON storage.objects
     FOR DELETE USING (
-      bucket_id = 'profile-photos' AND
+      bucket_id = 'profile-photo' AND
       auth.uid()::text = split_part(name, '/', 1)
     );
     RAISE NOTICE 'Delete policy created';
@@ -95,5 +95,5 @@ END $$;
 -- Final verification
 SELECT 
   'Storage Setup Complete' as status,
-  (SELECT COUNT(*) FROM storage.buckets WHERE name = 'profile-photos') as bucket_exists,
+  (SELECT COUNT(*) FROM storage.buckets WHERE name = 'profile-photo') as bucket_exists,
   (SELECT COUNT(*) FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname LIKE '%profile%') as policies_count; 
