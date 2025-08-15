@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { Post, PostComment, PostLike } from '../types';
-import { PhotoUploadService } from './photoUpload';
+import { EnhancedPhotoUploadService, PhotoType } from './enhancedPhotoUpload';
 
 export interface CreatePostData {
   content: string;
@@ -99,24 +99,44 @@ export class PostService {
       console.log('Post created successfully:', post);
       return post;
     } catch (error) {
-      console.error('Failed to create post:', error);
-      throw new Error(`Post creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error in createPost:', error);
+      throw error;
     }
   }
 
   static async uploadPostImages(photos: { uri: string; width: number; height: number; type: string }[]): Promise<string[]> {
-    try {
-      const uploadPromises = photos.map(async (photo) => {
-        const result = await PhotoUploadService.uploadPhotoToServer(photo);
-        return result;
-      });
+    const uploadedUrls: string[] = [];
 
-      const uploadedUrls = await Promise.all(uploadPromises);
-      return uploadedUrls;
-    } catch (error) {
-      console.error('Failed to upload post images:', error);
-      throw new Error(`Image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    for (const photo of photos) {
+      try {
+        // Convert to PhotoUploadResult format
+        const photoData = {
+          uri: photo.uri,
+          width: photo.width,
+          height: photo.height,
+          type: photo.type,
+          fileName: `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`,
+        };
+
+        const result = await EnhancedPhotoUploadService.uploadPhotoWithEdgeFunction(
+          photoData,
+          PhotoType.GENERAL,
+          `posts/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`
+        );
+
+        if (result.success && result.url) {
+          uploadedUrls.push(result.url);
+        } else {
+          console.error('Failed to upload photo:', result.error);
+          throw new Error(`Failed to upload photo: ${result.error}`);
+        }
+      } catch (error) {
+        console.error('Error uploading photo:', error);
+        throw error;
+      }
     }
+
+    return uploadedUrls;
   }
 
   static async getUserPosts(userId: string, includePrivate: boolean = false): Promise<Post[]> {

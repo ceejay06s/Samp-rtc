@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
@@ -163,11 +163,16 @@ export default function AccountScreen() {
           onPress: async () => {
             try {
               setLoading(true);
+              console.log('🔐 AccountScreen: Starting sign out process');
               await signOut();
+              console.log('✅ AccountScreen: Sign out successful, redirecting to homepage');
               router.replace('/welcome');
             } catch (error) {
-              console.error('Error signing out:', error);
-              showAlert('Error', 'Failed to sign out. Please try again.');
+              console.error('❌ AccountScreen: Sign out error:', error);
+              showAlert(
+                'Sign Out Failed', 
+                'Failed to sign out. Please try again. If the problem persists, please restart the app.'
+              );
             } finally {
               setLoading(false);
             }

@@ -191,6 +191,7 @@ export const SignupForm: React.FC<SignupFormProps> = ({
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          showPasswordToggle={true}
           error={errors.password}
         />
 
@@ -199,6 +200,7 @@ export const SignupForm: React.FC<SignupFormProps> = ({
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
+          showPasswordToggle={true}
           error={errors.confirmPassword}
         />
 

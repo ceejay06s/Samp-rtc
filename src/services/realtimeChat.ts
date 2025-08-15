@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { Message, MessageType } from '../types';
+import { EnhancedPhotoUploadService, PhotoType } from './enhancedPhotoUpload';
 
 export interface TypingIndicator {
   userId: string;
@@ -28,6 +29,14 @@ export interface RealtimeMessage extends Message {
   metadata?: any;
 }
 
+export interface ImageUploadData {
+  uri: string;
+  width: number;
+  height: number;
+  type: string;
+  base64?: string;
+}
+
 export class RealtimeChatService {
   private static instance: RealtimeChatService;
   private channels: Map<string, any> = new Map();
@@ -41,6 +50,93 @@ export class RealtimeChatService {
       RealtimeChatService.instance = new RealtimeChatService();
     }
     return RealtimeChatService.instance;
+  }
+
+  /**
+   * Send message with image attachment using UUID-based filename
+   */
+  async sendMessageWithImage(
+    conversationId: string,
+    imageData: ImageUploadData,
+    caption?: string,
+    metadata?: any
+  ): Promise<RealtimeMessage> {
+    try {
+      console.log('📤 Sending message with image using UUID filename');
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Generate UUID for message ID first
+      const messageId = EnhancedPhotoUploadService.generateMessageId();
+      console.log('Generated message ID:', messageId);
+
+      // Create organized path: media/conversations/conversation_id/user_id/message_id.filetype
+      const organizedPath = EnhancedPhotoUploadService.createChatMediaPath(
+        conversationId,
+        user.id,
+        messageId,
+        imageData.type
+      );
+
+      // Upload image with UUID filename and organized path
+      const uploadResult = await EnhancedPhotoUploadService.uploadPhotoWithMessageId(
+        imageData,
+        messageId,
+        PhotoType.CHAT,
+        organizedPath
+      );
+
+      if (!uploadResult.success) {
+        throw new Error(`Image upload failed: ${uploadResult.error}`);
+      }
+
+      console.log('✅ Image uploaded successfully with UUID filename');
+
+      // Create message with the same UUID as ID
+      const { data: messageData, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          id: messageId, // Use the generated UUID as message ID
+          conversation_id: conversationId,
+          sender_id: user.id,
+          content: caption || '',
+          message_type: MessageType.PHOTO,
+          is_read: false,
+          metadata: JSON.stringify({
+            ...metadata,
+            imageUrl: uploadResult.url,
+            imagePath: uploadResult.path,
+            imageBucket: uploadResult.bucket,
+            imageWidth: imageData.width,
+            imageHeight: imageData.height,
+            imageType: imageData.type
+          }),
+        })
+        .select()
+        .single();
+
+      if (messageError) throw messageError;
+
+      // Update conversation timestamp
+      await supabase
+        .from('conversations')
+        .update({
+          last_message_id: messageId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId);
+
+      // Map and return the message
+      const message = this.mapMessagePayload(messageData);
+      console.log('✅ Message with image sent successfully:', message.id);
+      return message;
+
+    } catch (error) {
+      console.error('❌ Failed to send message with image:', error);
+      throw new Error(`Failed to send message with image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Subscribe to real-time messages for a conversation
@@ -388,9 +484,53 @@ export class RealtimeChatService {
       messageType: payload.message_type,
       timestamp: new Date(payload.created_at),
       read: payload.is_read,
-      // Real-time specific fields
-      metadata: payload.metadata ? JSON.parse(payload.metadata) : undefined,
+      // Real-time specific fields - safely parse metadata
+      metadata: this.safeParseMetadata(payload.metadata),
     };
+  }
+
+  // Helper method to safely parse metadata
+  private safeParseMetadata(metadata: any): any {
+    // Handle null, undefined, or empty values
+    if (!metadata || metadata === null || metadata === undefined) {
+      return undefined;
+    }
+
+    // If metadata is already an object (and not null), return it
+    if (typeof metadata === 'object' && metadata !== null) {
+      // Validate that it's a plain object, not an array or other object type
+      if (Array.isArray(metadata)) {
+        console.warn('Metadata is an array, expected object:', metadata);
+        return undefined;
+      }
+      return metadata;
+    }
+
+    // If metadata is a string, try to parse it as JSON
+    if (typeof metadata === 'string') {
+      // Handle empty string
+      if (metadata.trim() === '') {
+        return undefined;
+      }
+      
+      try {
+        const parsed = JSON.parse(metadata);
+        // Ensure parsed result is an object (not array, string, number, etc.)
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          return parsed;
+        } else {
+          console.warn('Parsed metadata is not an object:', parsed);
+          return undefined;
+        }
+      } catch (error) {
+        console.warn('Failed to parse metadata as JSON:', metadata, error);
+        return undefined;
+      }
+    }
+
+    // For any other type (number, boolean, etc.), return undefined
+    console.warn('Metadata is not a string or object:', typeof metadata, metadata);
+    return undefined;
   }
 
   // Get messages for a conversation with enhanced pagination and filtering

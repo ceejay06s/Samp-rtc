@@ -1,81 +1,66 @@
--- Simple Supabase Storage Setup for Profile Photos
--- Run this in your Supabase SQL editor
+-- Simple Supabase Storage Setup
+-- Run this in your Supabase SQL Editor
 
--- Storage policies for the profile-photos bucket
--- Note: Create the bucket manually in the Supabase dashboard first
+-- Create storage buckets (if they don't exist)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES 
+  ('profile-photo', 'profile-photo', true, 52428800, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
+  ('telegram-stickers', 'telegram-stickers', true, 52428800, ARRAY['image/webp', 'image/png', 'image/gif']),
+  ('user-uploads', 'user-uploads', true, 52428800, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'text/plain', 'application/pdf', 'text/csv']),
+  ('chat-media', 'chat-media', true, 52428800, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'text/plain'])
+ON CONFLICT (id) DO NOTHING;
 
--- Allow users to upload their own profile photos
-CREATE POLICY "Users can upload their own profile photos" ON storage.objects
-FOR INSERT WITH CHECK (
-  bucket_id = 'profile-photos' AND
-  auth.uid()::text = split_part(name, '/', 1)
-);
+-- Enable RLS on storage.objects
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
--- Allow users to view all profile photos (for discovery)
-CREATE POLICY "Users can view all profile photos" ON storage.objects
-FOR SELECT USING (bucket_id = 'profile-photos');
+-- Create basic policies for profile-photo bucket
+CREATE POLICY "Profile photos are viewable by everyone" ON storage.objects
+  FOR SELECT USING (bucket_id = 'profile-photo');
 
--- Allow users to update their own profile photos
-CREATE POLICY "Users can update their own profile photos" ON storage.objects
-FOR UPDATE USING (
-  bucket_id = 'profile-photos' AND
-  auth.uid()::text = split_part(name, '/', 1)
-);
+CREATE POLICY "Users can upload profile photos" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'profile-photo' AND auth.role() = 'authenticated');
 
--- Allow users to delete their own profile photos
-CREATE POLICY "Users can delete their own profile photos" ON storage.objects
-FOR DELETE USING (
-  bucket_id = 'profile-photos' AND
-  auth.uid()::text = split_part(name, '/', 1)
-);
+CREATE POLICY "Users can update profile photos" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'profile-photo' AND auth.role() = 'authenticated');
 
--- Function to get user's photo count
-CREATE OR REPLACE FUNCTION get_user_photo_count(user_uuid UUID)
-RETURNS INTEGER AS $$
-BEGIN
-  RETURN (
-    SELECT COUNT(*)::INTEGER
-    FROM storage.objects
-    WHERE bucket_id = 'profile-photos'
-    AND split_part(name, '/', 1) = user_uuid::text
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+CREATE POLICY "Users can delete profile photos" ON storage.objects
+  FOR DELETE USING (bucket_id = 'profile-photo' AND auth.role() = 'authenticated');
 
--- Function to validate photo upload
-CREATE OR REPLACE FUNCTION validate_photo_upload()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Check if user has less than 6 photos
-  IF get_user_photo_count(auth.uid()) >= 6 THEN
-    RAISE EXCEPTION 'Maximum 6 photos allowed per user';
-  END IF;
-  
-  -- Check file size (10MB limit)
-  IF NEW.metadata->>'size'::text::bigint > 10485760 THEN
-    RAISE EXCEPTION 'File size must be less than 10MB';
-  END IF;
-  
-  -- Check file type
-  IF NEW.metadata->>'mimetype' NOT LIKE 'image/%' THEN
-    RAISE EXCEPTION 'Only image files are allowed';
-  END IF;
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Create basic policies for telegram-stickers bucket
+CREATE POLICY "Telegram stickers are viewable by everyone" ON storage.objects
+  FOR SELECT USING (bucket_id = 'telegram-stickers');
 
--- Trigger to validate photo uploads
-DROP TRIGGER IF EXISTS validate_photo_upload_trigger ON storage.objects;
-CREATE TRIGGER validate_photo_upload_trigger
-  BEFORE INSERT ON storage.objects
-  FOR EACH ROW
-  WHEN (NEW.bucket_id = 'profile-photos')
-  EXECUTE FUNCTION validate_photo_upload();
+CREATE POLICY "Users can upload stickers" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'telegram-stickers' AND auth.role() = 'authenticated');
 
--- Grant necessary permissions
-GRANT EXECUTE ON FUNCTION get_user_photo_count(UUID) TO authenticated;
+CREATE POLICY "Users can update stickers" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'telegram-stickers' AND auth.role() = 'authenticated');
 
--- Comments for documentation
-COMMENT ON FUNCTION get_user_photo_count(UUID) IS 'Get the number of photos uploaded by a user';
-COMMENT ON FUNCTION validate_photo_upload() IS 'Validate photo uploads (file size, type, count)'; 
+CREATE POLICY "Users can delete stickers" ON storage.objects
+  FOR DELETE USING (bucket_id = 'telegram-stickers' AND auth.role() = 'authenticated');
+
+-- Create basic policies for user-uploads bucket
+CREATE POLICY "User uploads are viewable by everyone" ON storage.objects
+  FOR SELECT USING (bucket_id = 'user-uploads');
+
+CREATE POLICY "Users can upload files" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'user-uploads' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can update files" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'user-uploads' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can delete files" ON storage.objects
+  FOR DELETE USING (bucket_id = 'user-uploads' AND auth.role() = 'authenticated');
+
+-- Create basic policies for chat-media bucket
+CREATE POLICY "Chat media is viewable by everyone" ON storage.objects
+  FOR SELECT USING (bucket_id = 'chat-media');
+
+CREATE POLICY "Users can upload chat media" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'chat-media' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can update chat media" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'chat-media' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can delete chat media" ON storage.objects
+  FOR DELETE USING (bucket_id = 'chat-media' AND auth.role() = 'authenticated'); 

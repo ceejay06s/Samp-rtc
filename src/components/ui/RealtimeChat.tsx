@@ -1,20 +1,30 @@
+import { MaterialIcons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     FlatList,
+    Image,
     KeyboardAvoidingView,
     Platform,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { useAuth } from '../../../lib/AuthContext';
+import { usePlatform } from '../../hooks/usePlatform';
 import { useRealtimeChat } from '../../hooks/useRealtimeChat';
+import { useViewport } from '../../hooks/useViewport';
+import { EnhancedPhotoUploadService, PhotoType } from '../../services/enhancedPhotoUpload';
 import { MessageType } from '../../types';
+import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
+import { EmojiGifPicker } from './EmojiGifPicker';
+import { SafeImage } from './SafeImage';
 
 interface RealtimeChatProps {
   conversationId: string;
@@ -44,6 +54,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimes
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
   };
+
+  const isGifMessage = message.message_type === MessageType.GIF;
+  const isStickerMessage = message.message_type === MessageType.STICKER;
+  const isPhotoMessage = message.message_type === MessageType.PHOTO;
   
   return (
     <View style={[
@@ -55,12 +69,35 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimes
         isOwn ? [styles.ownMessageBubble, { backgroundColor: theme.colors.primary }] : 
                [styles.otherMessageBubble, { backgroundColor: theme.colors.surface }]
       ]}>
-        <Text style={[
-          styles.messageText,
-          isOwn ? styles.ownMessageText : styles.otherMessageText
-        ]}>
-          {message.content}
-        </Text>
+        {isGifMessage ? (
+          <View style={styles.mediaMessageContainer}>
+            <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+            <Text style={[styles.mediaMessageText, { color: isOwn ? theme.colors.onPrimary : theme.colors.text }]}>
+              🎬 GIF
+            </Text>
+          </View>
+        ) : isStickerMessage ? (
+          <View style={styles.mediaMessageContainer}>
+            <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+            <Text style={[styles.mediaMessageText, { color: isOwn ? theme.colors.onPrimary : theme.colors.text }]}>
+              🎯 Sticker
+            </Text>
+          </View>
+        ) : isPhotoMessage ? (
+          <View style={styles.mediaMessageContainer}>
+            <SafeImage source={{ uri: message.metadata?.imageUrl || message.content }} style={styles.mediaMessageImage} />
+            <Text style={[styles.mediaMessageText, { color: isOwn ? theme.colors.onPrimary : theme.colors.text }]}>
+              📷 Photo
+            </Text>
+          </View>
+        ) : (
+          <Text style={[
+            styles.messageText,
+            isOwn ? styles.ownMessageText : styles.otherMessageText
+          ]}>
+            {message.content}
+          </Text>
+        )}
         {message.is_read && isOwn && (
           <Text style={[styles.readIndicator, { color: theme.colors.onPrimary }]}>
             ✓
@@ -123,10 +160,21 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
   onBack
 }) => {
   const theme = useTheme();
+  const { isWeb, isDesktopBrowser } = usePlatform();
+  const { isBreakpoint } = useViewport();
+  const isDesktop = isBreakpoint.xl || isDesktopBrowser;
+  
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<{ type: 'gif' | 'sticker' | 'image', url: string } | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const {
     messages,
@@ -169,17 +217,59 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
   };
 
   const handleSendMessage = async () => {
-    if (!messageText.trim()) return;
+    if (!messageText.trim() && !selectedMedia) return;
     
     const textToSend = messageText.trim();
     setMessageText('');
+    setSelectedMedia(null);
     setIsTyping(false);
     
     try {
-      await sendMessage(textToSend, MessageType.TEXT);
+      if (selectedMedia) {
+        // Send media message
+        await sendMessage(selectedMedia.url, selectedMedia.type === 'gif' ? MessageType.GIF : MessageType.STICKER);
+      } else {
+        // Send text message
+        await sendMessage(textToSend, MessageType.TEXT);
+      }
     } catch (err) {
       Alert.alert('Error', 'Failed to send message');
     }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageText(prev => prev + emoji);
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    setSelectedMedia({ type: 'gif', url: gifUrl });
+    setShowEmojiPicker(false);
+  };
+
+  const handleStickerSelect = (stickerUrl: string) => {
+    setSelectedMedia({ type: 'sticker', url: stickerUrl });
+    setShowEmojiPicker(false);
+  };
+
+  const clearSelectedMedia = () => {
+    setSelectedMedia(null);
+  };
+
+  const renderMediaPreview = () => {
+    if (!selectedMedia) return null;
+
+    return (
+      <View style={styles.mediaPreviewContainer}>
+        <View style={styles.mediaPreview}>
+          <Text style={[styles.mediaPreviewText, { color: theme.colors.textSecondary }]}>
+            {selectedMedia.type === 'gif' ? '🎬 GIF' : '🎯 Sticker'} selected
+          </Text>
+          <TouchableOpacity onPress={clearSelectedMedia} style={styles.clearMediaButton}>
+            <MaterialIcons name="close" size={16} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   const handleReconnect = async () => {
@@ -205,6 +295,202 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
   };
 
   const isOtherUserOnline = onlineUsers.length > 0;
+
+  // Enhanced keyboard handling for desktop
+  const handleKeyPress = (e: any) => {
+    if (isDesktop && e.nativeEvent?.key === 'Enter' && !e.nativeEvent?.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Image picker functionality
+  const handleImagePicker = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false, // Allow any aspect ratio
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log('Image selected:', asset.uri);
+        
+        // Show loading indicator
+        Alert.alert('Uploading...', 'Please wait while we upload your image.');
+        
+        // Convert to PhotoUploadResult format
+        const photoData = {
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          type: 'image/jpeg',
+          fileName: asset.fileName || `chat_image_${Date.now()}.jpg`,
+          base64: asset.base64 || undefined,
+        };
+
+        // Create conversation-specific path
+        const chatPath = conversationId 
+          ? `conversations/${conversationId}/${Date.now()}.jpg`
+          : `general/${Date.now()}.jpg`;
+
+        // Upload using Edge Function
+        const uploadResult = await EnhancedPhotoUploadService.uploadPhotoWithEdgeFunction(
+          photoData,
+          PhotoType.CHAT,
+          chatPath
+        );
+        
+        if (uploadResult.success && uploadResult.url) {
+          console.log('Image uploaded successfully:', uploadResult.url);
+          console.log('File path:', uploadResult.path);
+          
+          // Add the uploaded image to selected media
+          setSelectedMedia({
+            type: 'image',
+            url: uploadResult.url
+          });
+          setShowAttachmentMenu(false);
+          
+          Alert.alert('Success', 'Image uploaded successfully!');
+        } else {
+          console.error('Upload failed:', uploadResult.error);
+          Alert.alert('Upload Failed', uploadResult.error || 'Failed to upload image. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  // Voice recording functionality
+  const startRecording = async () => {
+    try {
+      const permissionResult = await Audio.requestPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Permission to access microphone is required!');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Start timer for recording duration
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000) as any;
+
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      Alert.alert('Error', 'Failed to start recording. Please try again.');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    try {
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+      setRecordingDuration(0);
+
+      if (uri) {
+        // Send voice message
+        await sendMessage(uri, MessageType.VOICE);
+      }
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      Alert.alert('Error', 'Failed to stop recording. Please try again.');
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const renderAttachmentMenu = () => {
+    if (!showAttachmentMenu) return null;
+
+    return (
+      <View style={[
+        styles.attachmentMenu,
+        { backgroundColor: theme.colors.surface }
+      ]}>
+        <TouchableOpacity
+          style={styles.attachmentOption}
+          onPress={() => {
+            setShowEmojiPicker(true);
+            setShowAttachmentMenu(false);
+          }}
+        >
+          <View style={[styles.attachmentIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+            <MaterialIcons name="emoji-emotions" size={24} color={theme.colors.primary} />
+          </View>
+          <Text style={[styles.attachmentText, { color: theme.colors.text }]}>
+            Emoji & GIF
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.attachmentOption}
+          onPress={handleImagePicker}
+        >
+          <View style={[styles.attachmentIcon, { backgroundColor: theme.colors.success + '20' }]}>
+            <MaterialIcons name="image" size={24} color={theme.colors.success} />
+          </View>
+          <Text style={[styles.attachmentText, { color: theme.colors.text }]}>
+            Photo
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.attachmentOption}
+          onPressIn={startRecording}
+          onPressOut={stopRecording}
+        >
+          <View style={[styles.attachmentIcon, { backgroundColor: theme.colors.warning + '20' }]}>
+            <MaterialIcons 
+              name={isRecording ? "stop" : "mic"} 
+              size={24} 
+              color={theme.colors.warning} 
+            />
+          </View>
+          <Text style={[styles.attachmentText, { color: theme.colors.text }]}>
+            {isRecording ? 'Recording...' : 'Voice'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   if (error) {
     return (
@@ -233,7 +519,14 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+      <View style={[
+        styles.header, 
+        { 
+          backgroundColor: theme.colors.surface,
+          paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+          paddingVertical: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+        }
+      ]}>
         {onBack && (
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Text style={[styles.backButtonText, { color: theme.colors.primary }]}>
@@ -243,7 +536,13 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
         )}
         
         <View style={styles.headerInfo}>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+          <Text style={[
+            styles.headerTitle, 
+            { 
+              color: theme.colors.text,
+              fontSize: isDesktop ? getResponsiveFontSize('xl') : getResponsiveFontSize('lg'),
+            }
+          ]}>
             {otherUserName}
           </Text>
           <OnlineStatusIndicator
@@ -284,52 +583,122 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           style={styles.messagesList}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={[
+            styles.messagesContent,
+            {
+              paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+              paddingVertical: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+            }
+          ]}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isDesktop}
         />
       )}
 
       {/* Typing Indicator */}
       <TypingIndicator isVisible={typingUsers.length > 0} />
 
-      {/* Input */}
-      <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface }]}>
-        <TextInput
-          style={[
-            styles.textInput,
-            {
-              backgroundColor: theme.colors.background,
-              color: theme.colors.text,
-              borderColor: theme.colors.border
-            }
-          ]}
-          value={messageText}
-          onChangeText={handleTextChange}
-          placeholder="Type a message..."
-          placeholderTextColor={theme.colors.textSecondary}
-          multiline
-          maxLength={1000}
-          onSubmitEditing={handleSendMessage}
-          blurOnSubmit={false}
-          returnKeyType="send"
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            {
-              backgroundColor: messageText.trim() ? theme.colors.primary : theme.colors.disabled
-            }
-          ]}
-          onPress={handleSendMessage}
-          disabled={!messageText.trim()}
-        >
-          <Text style={[styles.sendButtonText, { color: theme.colors.onPrimary }]}>
-            Send
+      {/* Recording Indicator */}
+      {isRecording && (
+        <View style={[styles.recordingIndicator, { backgroundColor: theme.colors.error }]}>
+          <MaterialIcons name="mic" size={20} color="white" />
+          <Text style={styles.recordingText}>
+            Recording... {formatDuration(recordingDuration)}
           </Text>
-        </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Input */}
+      <View style={[
+        styles.inputContainer, 
+        { 
+          backgroundColor: theme.colors.surface,
+          paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+          paddingVertical: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+        }
+      ]}>
+        {renderMediaPreview()}
+        
+        {/* Attachment Menu */}
+        {renderAttachmentMenu()}
+        
+        <View style={styles.inputRow}>
+          <TouchableOpacity
+            style={[
+              styles.attachmentButton,
+              isDesktop && styles.desktopAttachmentButton
+            ]}
+            onPress={() => setShowAttachmentMenu(!showAttachmentMenu)}
+          >
+            <MaterialIcons 
+              name="attach-file" 
+              size={isDesktop ? 28 : 24} 
+              color={theme.colors.primary} 
+            />
+          </TouchableOpacity>
+          
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                backgroundColor: theme.colors.background,
+                color: theme.colors.text,
+                borderColor: theme.colors.border,
+                fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
+                paddingHorizontal: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+                paddingVertical: isDesktop ? getResponsiveSpacing('md') : getResponsiveSpacing('sm'),
+                borderRadius: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+                maxHeight: isDesktop ? 120 : 100,
+              }
+            ]}
+            value={messageText}
+            onChangeText={handleTextChange}
+            onKeyPress={handleKeyPress}
+            placeholder="Type a message..."
+            placeholderTextColor={theme.colors.textSecondary}
+            multiline
+            maxLength={1000}
+            onSubmitEditing={handleSendMessage}
+            blurOnSubmit={false}
+            returnKeyType="send"
+          />
+          
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: (messageText.trim() || selectedMedia) ? theme.colors.primary : theme.colors.disabled,
+                paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+                paddingVertical: isDesktop ? getResponsiveSpacing('md') : getResponsiveSpacing('sm'),
+                borderRadius: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+                minWidth: isDesktop ? 80 : 60,
+              }
+            ]}
+            onPress={handleSendMessage}
+            disabled={!messageText.trim() && !selectedMedia}
+          >
+            <Text style={[
+              styles.sendButtonText, 
+              { 
+                color: theme.colors.onPrimary,
+                fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
+              }
+            ]}>
+              Send
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Emoji GIF Picker Modal */}
+      <EmojiGifPicker
+        visible={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        onEmojiSelect={handleEmojiSelect}
+        onGifSelect={handleGifSelect}
+        onStickerSelect={handleStickerSelect}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -337,27 +706,29 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    maxWidth: 1200, // Limit width on desktop
+    alignSelf: 'center', // Center on desktop
+    width: '100%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    minHeight: 60,
   },
   backButton: {
-    marginRight: 12,
+    marginRight: getResponsiveSpacing('md'),
+    padding: getResponsiveSpacing('sm'),
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: getResponsiveFontSize('md'),
     fontWeight: '500',
   },
   headerInfo: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
     fontWeight: '600',
     marginBottom: 2,
   },
@@ -525,5 +896,110 @@ const styles = StyleSheet.create({
   connectionText: {
     fontSize: 10,
     marginLeft: 4,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: getResponsiveSpacing('sm'),
+  },
+  emojiButton: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  desktopEmojiButton: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderRadius: getResponsiveSpacing('md'),
+  },
+  mediaPreviewContainer: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  mediaPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    backgroundColor: '#f0f2f5',
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  mediaPreviewText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+  },
+  clearMediaButton: {
+    padding: getResponsiveSpacing('xs'),
+  },
+  mediaMessageContainer: {
+    alignItems: 'center',
+    padding: getResponsiveSpacing('sm'),
+  },
+  mediaMessageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  mediaMessageText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  attachmentButton: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  desktopAttachmentButton: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderRadius: getResponsiveSpacing('md'),
+  },
+  attachmentMenu: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: getResponsiveSpacing('md'),
+    paddingHorizontal: getResponsiveSpacing('md'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  attachmentOption: {
+    alignItems: 'center',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  attachmentIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  attachmentText: {
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    marginHorizontal: getResponsiveSpacing('md'),
+    marginBottom: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('md'),
+  },
+  recordingText: {
+    color: 'white',
+    marginLeft: getResponsiveSpacing('sm'),
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
   },
 }); 

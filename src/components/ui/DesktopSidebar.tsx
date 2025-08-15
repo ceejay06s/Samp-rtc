@@ -101,11 +101,16 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
       'Are you sure you want to sign out?',
       async () => {
         try {
+          console.log('🔐 DesktopSidebar: Starting sign out process');
           await signOut();
-          router.replace('/login');
+          console.log('✅ DesktopSidebar: Sign out successful, redirecting to homepage');
+          router.replace('/welcome');
         } catch (error) {
-          console.error('Error signing out:', error);
-          WebAlert.showError('Error', 'Failed to sign out. Please try again.');
+          console.error('❌ DesktopSidebar: Sign out error:', error);
+          WebAlert.showError(
+            'Sign Out Failed', 
+            'Failed to sign out. Please try again. If the problem persists, please refresh the page.'
+          );
         }
       }
     );

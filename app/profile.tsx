@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
@@ -7,6 +7,7 @@ import { Card } from '../src/components/ui/Card';
 import { DatePicker } from '../src/components/ui/DatePicker';
 import { GenderSelector } from '../src/components/ui/GenderSelector';
 import { Input } from '../src/components/ui/Input';
+import { NearestCity } from '../src/components/ui/NearestCity';
 import { PhotoGallery } from '../src/components/ui/PhotoGallery';
 import { PhotoUploadWithCrop } from '../src/components/ui/PhotoUploadWithCrop';
 import { RangeSlider } from '../src/components/ui/RangeSlider';
@@ -14,8 +15,9 @@ import { SingleSlider } from '../src/components/ui/Slider';
 import { WebAlert } from '../src/components/ui/WebAlert';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { AuthService } from '../src/services/auth';
-import { PhotoUploadService } from '../src/services/photoUpload';
+import { EnhancedPhotoUploadService, PhotoType } from '../src/services/enhancedPhotoUpload';
 import { Profile } from '../src/types';
+
 import { calculateAge, formatDateToISO } from '../src/utils/dateUtils';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
@@ -187,7 +189,7 @@ export default function ProfileScreen() {
     );
   };
 
-  // New photo upload handler with cropping
+  // New photo upload handler with Edge Function
   const handlePhotoUpload = async (imageUrl: string) => {
     if (!user) {
       showAlert('Error', 'Please log in to add photos');
@@ -215,6 +217,50 @@ export default function ProfileScreen() {
     }
   };
 
+  // Enhanced photo upload with Edge Function
+  const handleEnhancedPhotoUpload = async () => {
+    if (!user) {
+      showAlert('Error', 'Please log in to add photos');
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      
+      // Show photo picker options
+      const photo = await EnhancedPhotoUploadService.showImagePickerOptions();
+      if (!photo) {
+        setUploadingPhoto(false);
+        return;
+      }
+
+      // Upload using Edge Function
+      const result = await EnhancedPhotoUploadService.uploadPhotoWithEdgeFunction(
+        photo,
+        PhotoType.PROFILE
+      );
+
+      if (result.success && result.url) {
+        // Add to local state
+        setPhotos(prev => [...prev, result.url!]);
+        
+        // Save to profile immediately
+        await AuthService.updateProfile(user.id, { photos: [...photos, result.url!] });
+        
+        // Show success message
+        showAlert('Success', 'Photo uploaded successfully!');
+      } else {
+        showAlert('Error', result.error || 'Failed to upload photo');
+      }
+    } catch (error) {
+      console.error('Failed to upload photo:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showAlert('Error', `Failed to upload photo: ${errorMessage}`);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   // Legacy photo upload methods (keeping for backward compatibility)
   const addPhoto = async () => {
     setShowPhotoUpload(true);
@@ -225,50 +271,7 @@ export default function ProfileScreen() {
     setShowPhotoUpload(true);
   };
 
-  const testBucketConnection = async () => {
-    try {
-      setUploadingPhoto(true);
-      console.log('Testing storage connection...');
-      
-      const results = await PhotoUploadService.testBucketConnection();
-      
-      let message = 'Storage Connection Test Results:\n\n';
-      
-      if (results.success) {
-        if (results.bucketExists && results.bucketAccessible && results.canUpload) {
-          message += '✅ Supabase Storage Available (Paid Plan)\n';
-          message += '✓ Photos will be stored in Supabase storage\n';
-          message += '✓ Better performance and scalability\n';
-        } else {
-          message += '✅ Base64 Storage Available (Free Plan)\n';
-          message += '✓ Photos will be stored as base64 in database\n';
-          message += '✓ Compatible with free Supabase plan\n';
-        }
-      } else {
-        message += '❌ Storage Issues Detected\n';
-      }
-      
-      message += '\nDetailed Results:\n';
-      message += `• Bucket exists: ${results.bucketExists ? 'Yes' : 'No'}\n`;
-      message += `• Bucket accessible: ${results.bucketAccessible ? 'Yes' : 'No'}\n`;
-      message += `• Can upload: ${results.canUpload ? 'Yes' : 'No'}\n`;
-      message += `• Overall success: ${results.success ? 'Yes' : 'No'}\n`;
-      
-      if (results.errors.length > 0) {
-        message += '\nNotes:\n';
-        results.errors.forEach((error, index) => {
-          message += `${index + 1}. ${error}\n`;
-        });
-      }
-      
-      showAlert('Storage Test Results', message);
-    } catch (error) {
-      console.error('Storage test failed:', error);
-      showAlert('Test Error', 'Failed to test storage connection');
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
+
 
   const removePhoto = (index: number) => {
     console.log('🖼️ removePhoto called with index:', index);
@@ -452,6 +455,18 @@ export default function ProfileScreen() {
         {/* Location */}
         <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Location</Text>
+          
+          {/* Current Location Display */}
+          <View style={styles.locationContainer}>
+            <Text style={[styles.locationLabel, { color: theme.colors.textSecondary }]}>
+              Current Location:
+            </Text>
+            <NearestCity 
+              showLoading={true}
+              style={styles.currentLocation}
+            />
+          </View>
+          
           <Input
             placeholder="City, State"
             value={location}
@@ -471,17 +486,19 @@ export default function ProfileScreen() {
             onFileSelect={handleWebFileSelect}
           />
           
-          {/* Test Bucket Connection Button */}
+
+
+          {/* Test Edge Function Photo Upload Button */}
           <TouchableOpacity
             style={[
               styles.testButton,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 10 }
             ]}
-            onPress={testBucketConnection}
+            onPress={handleEnhancedPhotoUpload}
             disabled={uploadingPhoto}
           >
             <Text style={[styles.testButtonText, { color: theme.colors.text }]}>
-              {uploadingPhoto ? 'Testing...' : 'Test Storage Connection'}
+              {uploadingPhoto ? 'Uploading...' : 'Test Edge Function Photo Upload'}
             </Text>
           </TouchableOpacity>
         </Card>
@@ -860,5 +877,17 @@ const styles = StyleSheet.create({
   },
   saveContainer: {
     marginTop: getResponsiveSpacing('lg'),
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  locationLabel: {
+    fontSize: getResponsiveFontSize('md'),
+    marginRight: getResponsiveSpacing('sm'),
+  },
+  currentLocation: {
+    flex: 1,
   },
 }); 

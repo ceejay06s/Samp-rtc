@@ -3,12 +3,16 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { DesktopSidebar, MobileToolbar } from '../src/components/ui';
+import { useNavigationTracking } from '../src/hooks/useNavigationTracking';
 import { usePlatform } from '../src/hooks/usePlatform';
 
 function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const platform = usePlatform();
   const { user } = useAuth();
+  
+  // Track navigation for referrer functionality
+  useNavigationTracking();
 
   return (
     <>
@@ -42,6 +46,7 @@ function RootLayoutContent() {
             <Stack.Screen name="menu" />
             <Stack.Screen name="preferences" />
             <Stack.Screen name="user-profile" />
+            <Stack.Screen name="chat" />
           </Stack>
           
           {/* Mobile Toolbar - show on mobile devices and mobile browsers only when logged in */}

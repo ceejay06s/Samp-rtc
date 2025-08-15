@@ -1,22 +1,24 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { IconNames, MaterialIcon } from '../src/components/ui/MaterialIcon';
+import { useNavigationTracking } from '../src/hooks/useNavigationTracking';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
+import { AuthStateService } from '../src/services/authStateService';
 import { MessagingService } from '../src/services/messaging';
 import { Conversation } from '../src/types';
 import { formatLocationForDisplay } from '../src/utils/location';
@@ -44,29 +46,68 @@ export default function MessagesScreen() {
   const { isWeb } = usePlatform();
   const { isBreakpoint } = useViewport();
   const isDesktop = isBreakpoint.xl || isWeb;
+  
+  // Track navigation for referrer functionality
+  useNavigationTracking();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+
+  // Set user as active when entering messages screen
+  useEffect(() => {
+    const setUserActive = async () => {
+      if (user?.id) {
+        try {
+          console.log('💬 MessagesScreen: Setting user as active');
+          await AuthStateService.getInstance().setOnlineStatus(true);
+          console.log('✅ MessagesScreen: User set as active');
+        } catch (error) {
+          console.warn('⚠️ MessagesScreen: Failed to set user as active:', error);
+        }
+      }
+    };
+
+    setUserActive();
+
+    // Cleanup: Set user as inactive when leaving messages screen
+    return () => {
+      const cleanup = async () => {
+        if (user?.id) {
+          try {
+            console.log('💬 MessagesScreen: Setting user as inactive (leaving messages)');
+            await AuthStateService.getInstance().setOnlineStatus(false);
+            console.log('✅ MessagesScreen: User set as inactive');
+          } catch (error) {
+            console.warn('⚠️ MessagesScreen: Failed to set user as inactive:', error);
+          }
+        }
+      };
+      cleanup();
+    };
+  }, [user?.id]);
 
   const loadConversations = useCallback(async () => {
     if (!user?.id) {
-      setError('Please log in to view your conversations');
+      setError('Please sign in to view your conversations');
       setLoading(false);
+      console.log('❌ MessagesScreen: User not authenticated');
       return;
     }
 
     try {
       setError(null);
-      console.log('💬 Loading conversations for user:', user.id);
+      console.log('💬 MessagesScreen: Loading conversations for user:', user.id);
       
       const conversationsData = await MessagingService.getConversations(user.id);
-      console.log('✅ Loaded conversations:', conversationsData.length);
+      console.log('✅ MessagesScreen: Loaded conversations:', conversationsData.length);
       
       setConversations(conversationsData);
     } catch (error) {
-      console.error('❌ Failed to load conversations:', error);
+      console.error('❌ MessagesScreen: Failed to load conversations:', error);
       setError(error instanceof Error ? error.message : 'Failed to load conversations');
       
       // For development, show mock conversations
@@ -92,21 +133,45 @@ export default function MessagesScreen() {
   };
 
   const handleMarkAsRead = async (conversation: Conversation) => {
-    if (!user?.id) return;
-    
     try {
-      await MessagingService.markMessagesAsRead(conversation.id, user.id);
-      // Update local state
-      setConversations(prev => 
-        prev.map(conv => 
-          conv.id === conversation.id 
-            ? { ...conv, unreadCount: 0 }
-            : conv
-        )
-      );
+      // TODO: Implement mark as read functionality
+      console.log('Marking conversation as read:', conversation.id);
+      setShowOptionsMenu(false);
+      setSelectedConversation(null);
     } catch (error) {
       console.error('Failed to mark as read:', error);
     }
+  };
+
+  const handleDeleteConversation = async (conversation: Conversation) => {
+    try {
+      // TODO: Implement delete conversation functionality
+      console.log('Deleting conversation:', conversation.id);
+      setShowOptionsMenu(false);
+      setSelectedConversation(null);
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    }
+  };
+
+  const handleBlockUser = async (conversation: Conversation) => {
+    try {
+      // TODO: Implement block user functionality
+      console.log('Blocking user:', conversation.otherProfile?.user_id);
+      setShowOptionsMenu(false);
+      setSelectedConversation(null);
+    } catch (error) {
+      console.error('Failed to block user:', error);
+    }
+  };
+
+  const handleShowOptions = (conversation: Conversation) => {
+    setSelectedConversation(conversation);
+    setShowOptionsMenu(true);
+  };
+
+  const handleLongPress = (conversation: Conversation) => {
+    handleShowOptions(conversation);
   };
 
   // Mock conversations for development
@@ -214,83 +279,165 @@ export default function MessagesScreen() {
 
     const hasUnread = (conversation.unreadCount || 0) > 0;
     const lastMessage = conversation.lastMessage;
+    const isSelected = selectedConversation?.id === conversation.id;
     
     return (
-      <TouchableOpacity
-        style={[
-          styles.conversationItem,
-          { backgroundColor: theme.colors.surface },
-          hasUnread && { backgroundColor: `${theme.colors.primary}15` }
-        ]}
-        onPress={() => handleConversationPress(conversation)}
-        activeOpacity={0.7}
-        hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-      >
-        <View style={styles.avatarContainer}>
-          <Image
-            source={{
-              uri: otherProfile.photos?.[0] || 'https://via.placeholder.com/60x60/FF6B9D/FFFFFF?text=No+Photo'
-            }}
-            style={styles.avatar}
-            resizeMode="cover"
-          />
-          {otherProfile.is_online && (
-            <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
-          )}
-        </View>
+      <View style={styles.conversationItemContainer}>
+        <TouchableOpacity
+          style={[
+            styles.conversationItem,
+            { backgroundColor: theme.colors.surface },
+            hasUnread && { backgroundColor: `${theme.colors.primary}15` }
+          ]}
+          onPress={() => handleConversationPress(conversation)}
+          onLongPress={() => handleLongPress(conversation)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+        >
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{
+                uri: otherProfile.photos?.[0] || 'https://via.placeholder.com/60x60/FF6B9D/FFFFFF?text=No+Photo'
+              }}
+              style={styles.avatar}
+              resizeMode="cover"
+            />
+            {otherProfile.is_online && (
+              <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
+            )}
+          </View>
 
-        <View style={styles.conversationContent}>
-          <View style={styles.conversationHeader}>
-            <Text
-              style={[
-                styles.conversationName,
-                { color: theme.colors.text },
-                hasUnread && styles.unreadText
-              ]}
-              numberOfLines={1}
-            >
-              {otherProfile.first_name}
-            </Text>
-            <View style={styles.conversationMeta}>
-              {lastMessage && (
-                <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
-                  {formatMessageTime(lastMessage.timestamp || new Date())}
-                </Text>
-              )}
-              {hasUnread && (
-                <View style={[styles.unreadBadge, { backgroundColor: theme.colors.primary }]}>
-                  <Text style={styles.unreadCount}>
-                    {(conversation.unreadCount || 0) > 99 ? '99+' : conversation.unreadCount || 0}
+          <View style={styles.conversationContent}>
+            <View style={styles.conversationHeader}>
+              <Text
+                style={[
+                  styles.conversationName,
+                  { color: theme.colors.text },
+                  hasUnread && styles.unreadText
+                ]}
+                numberOfLines={1}
+              >
+                {otherProfile.first_name}
+              </Text>
+              <View style={styles.conversationMeta}>
+                {lastMessage && (
+                  <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
+                    {formatMessageTime(lastMessage.timestamp || new Date())}
                   </Text>
-                </View>
-              )}
+                )}
+                {hasUnread && (
+                  <View style={[styles.unreadBadge, { backgroundColor: theme.colors.primary }]}>
+                    <Text style={styles.unreadCount}>
+                      {(conversation.unreadCount || 0) > 99 ? '99+' : conversation.unreadCount || 0}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
 
-          <View style={styles.messagePreview}>
-            <Text
-              style={[
-                styles.lastMessage,
-                { color: theme.colors.textSecondary },
-                hasUnread && { color: theme.colors.text, fontWeight: '500' }
-              ]}
-              numberOfLines={2}
+            <View style={styles.messagePreview}>
+              <Text
+                style={[
+                  styles.lastMessage,
+                  { color: theme.colors.textSecondary },
+                  hasUnread && { color: theme.colors.text, fontWeight: '500' }
+                ]}
+                numberOfLines={2}
+              >
+                {lastMessage 
+                  ? (lastMessage.senderId === user?.id ? 'You: ' : '') + lastMessage.content
+                  : 'Start a conversation...'
+                }
+              </Text>
+            </View>
+
+            {formatLocationForDisplay(otherProfile.location, 'city-state') && (
+              <Text style={[styles.location, { color: theme.colors.textSecondary }]}>
+                📍 {formatLocationForDisplay(otherProfile.location, 'city-state')}
+              </Text>
+            )}
+          </View>
+          
+          <View style={styles.conversationActions}>
+            <MaterialIcon name={IconNames.forward} size={20} color={theme.colors.textSecondary} />
+            <TouchableOpacity
+              style={styles.optionsButton}
+              onPress={() => handleShowOptions(conversation)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              {lastMessage 
-                ? (lastMessage.senderId === user?.id ? 'You: ' : '') + lastMessage.content
-                : 'Start a conversation...'
-              }
-            </Text>
+              <MaterialIcon name={IconNames.more} size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
           </View>
+        </TouchableOpacity>
 
-          {formatLocationForDisplay(otherProfile.location, 'city-state') && (
-            <Text style={[styles.location, { color: theme.colors.textSecondary }]}>
-              📍 {formatLocationForDisplay(otherProfile.location, 'city-state')}
-            </Text>
-          )}
-        </View>
-        <MaterialIcon name={IconNames.forward} size={20} color={theme.colors.textSecondary} />
-      </TouchableOpacity>
+        {/* Side Options Panel */}
+        {isSelected && showOptionsMenu && (
+          <>
+            <TouchableOpacity
+              style={styles.sideOptionsBackdrop}
+              onPress={() => setShowOptionsMenu(false)}
+              activeOpacity={1}
+            />
+            <View style={[styles.sideOptionsPanel, { backgroundColor: theme.colors.surface }]}>
+              <View style={styles.sideOptionsHeader}>
+                <Text style={[styles.sideOptionsTitle, { color: theme.colors.text }]}>
+                  {otherProfile.first_name}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowOptionsMenu(false)}
+                  style={styles.sideOptionsCloseButton}
+                >
+                  <MaterialIcon name={IconNames.close} size={20} color={theme.colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.sideOptionsList}>
+                {hasUnread && (
+                  <TouchableOpacity
+                    style={styles.sideOptionItem}
+                    onPress={() => handleMarkAsRead(conversation)}
+                  >
+                    <MaterialIcon name={IconNames.markAsRead} size={18} color={theme.colors.primary} />
+                    <Text style={[styles.sideOptionText, { color: theme.colors.text }]}>
+                      Mark as Read
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.sideOptionItem}
+                  onPress={() => handleConversationPress(conversation)}
+                >
+                  <MaterialIcon name={IconNames.messages} size={18} color={theme.colors.primary} />
+                  <Text style={[styles.sideOptionText, { color: theme.colors.text }]}>
+                    Open Chat
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.sideOptionItem}
+                  onPress={() => handleBlockUser(conversation)}
+                >
+                  <MaterialIcon name={IconNames.block} size={18} color={theme.colors.error} />
+                  <Text style={[styles.sideOptionText, { color: theme.colors.error }]}>
+                    Block User
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.sideOptionItem}
+                  onPress={() => handleDeleteConversation(conversation)}
+                >
+                  <MaterialIcon name={IconNames.delete} size={18} color={theme.colors.error} />
+                  <Text style={[styles.sideOptionText, { color: theme.colors.error }]}>
+                    Delete Conversation
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
+      </View>
     );
   };
 
@@ -318,6 +465,47 @@ export default function MessagesScreen() {
       </View>
     </View>
   );
+
+  const renderOptionsMenu = () => {
+    // Inline options are now handled within each conversation item
+    return null;
+  };
+
+  // Show authentication error if user is not signed in
+  if (!user?.id) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.header, isDesktop && styles.desktopHeader]}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={[styles.backButton, { color: theme.colors.primary }]}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={[
+            styles.title, 
+            { color: theme.colors.text },
+            isDesktop && { fontSize: getResponsiveFontSize('xxl') }
+          ]}>
+            Messages
+          </Text>
+          <View style={{ width: 50 }} />
+        </View>
+        
+        <Card style={styles.errorCard}>
+          <Text style={[styles.errorTitle, { color: theme.colors.error }]}>
+            Please Sign In
+          </Text>
+          <Text style={[styles.errorText, { color: theme.colors.textSecondary }]}>
+            You need to be signed in to view your conversations.
+          </Text>
+          <Button
+            title="Sign In"
+            onPress={() => router.push('/login')}
+            variant="primary"
+            style={{ marginTop: theme.spacing.lg }}
+          />
+        </Card>
+      </View>
+    );
+  }
 
   // Loading state
   if (loading) {
@@ -428,6 +616,7 @@ export default function MessagesScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+      {renderOptionsMenu()}
     </View>
   );
 }
@@ -492,12 +681,19 @@ const styles = StyleSheet.create({
   desktopListContainer: {
     paddingHorizontal: getResponsiveSpacing('xl'),
   },
+  conversationItemContainer: {
+    position: 'relative',
+    marginBottom: getResponsiveSpacing('xs'),
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
   conversationItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
     padding: getResponsiveSpacing('md'),
     borderRadius: 12,
-    marginBottom: getResponsiveSpacing('xs'),
+    minHeight: 80,
   },
   avatarContainer: {
     position: 'relative',
@@ -567,6 +763,14 @@ const styles = StyleSheet.create({
   location: {
     fontSize: getResponsiveFontSize('sm'),
   },
+  conversationActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: getResponsiveSpacing('sm'),
+  },
+  optionsButton: {
+    padding: 5,
+  },
   separator: {
     height: 1,
     marginLeft: 76, // Align with text content
@@ -596,5 +800,100 @@ const styles = StyleSheet.create({
   },
   emptyButton: {
     width: '100%',
+  },
+  // Removed old modal options styles - now using inline options
+  inlineOptions: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+    padding: getResponsiveSpacing('md'),
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  inlineOptionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  inlineOptionsTitle: {
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: 'bold',
+  },
+  inlineOptionsCloseButton: {
+    padding: 5,
+  },
+  inlineOptionsList: {
+    gap: getResponsiveSpacing('sm'),
+  },
+  inlineOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    borderRadius: 8,
+  },
+  inlineOptionText: {
+    marginLeft: getResponsiveSpacing('md'),
+    fontSize: getResponsiveFontSize('md'),
+  },
+  sideOptionsPanel: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 200,
+    zIndex: 1000,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    padding: getResponsiveSpacing('md'),
+  },
+  sideOptionsBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 999,
+  },
+  sideOptionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  sideOptionsTitle: {
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: 'bold',
+  },
+  sideOptionsCloseButton: {
+    padding: 5,
+  },
+  sideOptionsList: {
+    gap: getResponsiveSpacing('sm'),
+  },
+  sideOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    borderRadius: 8,
+  },
+  sideOptionText: {
+    marginLeft: getResponsiveSpacing('md'),
+    fontSize: getResponsiveFontSize('md'),
   },
 }); 

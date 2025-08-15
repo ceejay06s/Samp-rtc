@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui';
@@ -69,11 +69,16 @@ export default function DashboardScreen() {
         'Are you sure you want to sign out?',
         async () => {
           try {
+            console.log('🔐 DashboardScreen: Starting sign out process');
             await signOut();
-            router.replace('/login');
+            console.log('✅ DashboardScreen: Sign out successful, redirecting to homepage');
+            router.replace('/welcome');
           } catch (error) {
-            console.error('Sign out error:', error);
-            showAlert('Error', 'Failed to sign out. Please try again.');
+            console.error('❌ DashboardScreen: Sign out error:', error);
+            showAlert(
+              'Sign Out Failed', 
+              'Failed to sign out. Please try again. If the problem persists, please refresh the page.'
+            );
           }
         }
       );
@@ -92,11 +97,16 @@ export default function DashboardScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
+                console.log('🔐 DashboardScreen: Starting sign out process');
                 await signOut();
-                router.replace('/login');
+                console.log('✅ DashboardScreen: Sign out successful, redirecting to homepage');
+                router.replace('/welcome');
               } catch (error) {
-                console.error('Sign out error:', error);
-                Alert.alert('Error', 'Failed to sign out. Please try again.');
+                console.error('❌ DashboardScreen: Sign out error:', error);
+                Alert.alert(
+                  'Sign Out Failed', 
+                  'Failed to sign out. Please try again. If the problem persists, please restart the app.'
+                );
               }
             },
           },

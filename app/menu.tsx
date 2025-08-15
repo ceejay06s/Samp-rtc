@@ -3,10 +3,10 @@ import React from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Card } from '../src/components/ui/Card';
+import { NearestCity } from '../src/components/ui/NearestCity';
 import { WebAlert } from '../src/components/ui/WebAlert';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { calculateAge } from '../src/utils/dateUtils';
-import { formatLocationForDisplay } from '../src/utils/location';
 import { isDesktopBrowser } from '../src/utils/platform';
 import { getResponsiveFontSize, getResponsiveSpacing, isBreakpoint } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
@@ -76,11 +76,16 @@ export default function MenuScreen() {
         'Are you sure you want to sign out?',
         async () => {
           try {
+            console.log('🔐 MenuScreen: Starting sign out process');
             await signOut();
-            router.replace('/login');
+            console.log('✅ MenuScreen: Sign out successful, redirecting to homepage');
+            router.replace('/welcome');
           } catch (error) {
-            console.error('Sign out error:', error);
-            showAlert('Error', 'Failed to sign out. Please try again.');
+            console.error('❌ MenuScreen: Sign out error:', error);
+            showAlert(
+              'Sign Out Failed', 
+              'Failed to sign out. Please try again. If the problem persists, please refresh the page.'
+            );
           }
         }
       );
@@ -95,11 +100,16 @@ export default function MenuScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
+                console.log('🔐 MenuScreen: Starting sign out process');
                 await signOut();
-                router.replace('/login');
+                console.log('✅ MenuScreen: Sign out successful, redirecting to homepage');
+                router.replace('/welcome');
               } catch (error) {
-                console.error('Sign out error:', error);
-                Alert.alert('Error', 'Failed to sign out. Please try again.');
+                console.error('❌ MenuScreen: Sign out error:', error);
+                Alert.alert(
+                  'Sign Out Failed', 
+                  'Failed to sign out. Please try again. If the problem persists, please restart the app.'
+                );
               }
             },
           },
@@ -309,27 +319,22 @@ export default function MenuScreen() {
               {profile.first_name} {profile.last_name}
             </Text>
             
+            {/* Location Section */}
+            <View style={styles.locationSection}>
+              <NearestCity 
+                showLoading={false}
+                style={styles.locationDisplay}
+              />
+            </View>
+            
+            {/* Age Section */}
             <Text style={[
               styles.userDetails,
               { color: theme.colors.textSecondary },
               isDesktop && { fontSize: getDesktopFontSize('sm') }
             ]}>
               {profile.birthdate ? `${calculateAge(profile.birthdate)} years old` : 'Age not set'}
-              {profile.location && ` • ${formatLocationForDisplay(profile.location, 'city-state')}`}
             </Text>
-            
-            {profile.bio && (
-              <Text 
-                style={[
-                  styles.userBio,
-                  { color: theme.colors.textSecondary },
-                  isDesktop && { fontSize: getDesktopFontSize('sm') }
-                ]}
-                numberOfLines={2}
-              >
-                {profile.bio}
-              </Text>
-            )}
           </View>
           
           <View style={styles.profileArrow}>
@@ -566,15 +571,24 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: getResponsiveFontSize('md'),
     fontWeight: 'bold',
-    marginBottom: 2,
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  locationSection: {
+    marginBottom: 0,
+  },
+  locationDisplay: {
+    fontSize: getResponsiveFontSize('sm'),
+    color: '#666',
   },
   userDetails: {
     fontSize: getResponsiveFontSize('sm'),
     color: '#666',
+    marginBottom: getResponsiveSpacing('sm'),
   },
   userBio: {
     fontSize: getResponsiveFontSize('sm'),
-    marginTop: 4,
+    marginTop: getResponsiveSpacing('sm'),
+    textAlign: 'left',
   },
   profileArrow: {
     marginLeft: getResponsiveSpacing('sm'),

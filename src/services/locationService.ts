@@ -6,6 +6,18 @@ export interface LocationData {
   address?: string;
   name?: string;
   formattedAddress?: string;
+  addressData?: {
+    house_number?: string;
+    road?: string;
+    suburb?: string;
+    city?: string;
+    county?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+    country_code?: string;
+    [key: string]: any;
+  };
 }
 
 export interface PlaceResult {
@@ -134,11 +146,30 @@ export class LocationService {
       // Get address for the current location
       const address = await this.reverseGeocode(latitude, longitude);
       
+      // Get structured address data from Nominatim
+      let addressData = null;
+      try {
+        const nominatimUrl = `${this.NOMINATIM_BASE}/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&extratags=1`;
+        const response = await fetch(nominatimUrl, {
+          headers: {
+            'User-Agent': 'SampRTC-DatingApp/1.0 (Dating App)',
+          },
+        });
+        
+        if (response.ok) {
+          const nominatimData = await response.json();
+          addressData = nominatimData.address || null;
+        }
+      } catch (error) {
+        console.log('Could not fetch structured address data:', error);
+      }
+      
       return {
         latitude,
         longitude,
         address: address?.formatted_address,
         formattedAddress: address?.formatted_address,
+        addressData: addressData,
       };
     } catch (error) {
       console.error('Error getting current location:', error);

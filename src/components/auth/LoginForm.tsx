@@ -110,6 +110,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          showPasswordToggle={true}
           error={errors.password}
         />
 

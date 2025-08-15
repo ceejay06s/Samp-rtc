@@ -1,7 +1,6 @@
-import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { PhotoUploadService } from '../../services/photoUpload';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import { EnhancedPhotoUploadService, PhotoType } from '../../services/enhancedPhotoUpload';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
 import { Button } from './Button';
@@ -20,57 +19,19 @@ export const PhotoUploadWithCrop: React.FC<PhotoUploadWithCropProps> = ({
 }) => {
   const theme = useTheme();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const pickImage = async () => {
+  const handleImageSelect = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false, // We'll handle editing with our cropper
-        aspect: [3, 4],
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedImage(result.assets[0].uri);
+      const photo = await EnhancedPhotoUploadService.pickImageFromGallery();
+      if (photo) {
+        setSelectedImage(photo.uri);
         setShowCropper(true);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Permission to access camera is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false, // We'll handle editing with our cropper
-        aspect: [3, 4],
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedImage(result.assets[0].uri);
-        setShowCropper(true);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      console.error('Error selecting image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
     }
   };
 
@@ -102,7 +63,7 @@ export const PhotoUploadWithCrop: React.FC<PhotoUploadWithCropProps> = ({
         console.warn('Could not get image dimensions, using defaults:', error);
       }
 
-      // Convert the cropped image to the format expected by PhotoUploadService
+      // Convert the cropped image to the format expected by EnhancedPhotoUploadService
       const photoData = {
         uri: croppedImageUri,
         width: width,
@@ -111,8 +72,16 @@ export const PhotoUploadWithCrop: React.FC<PhotoUploadWithCropProps> = ({
         fileName: `photo_${Date.now()}.jpg`,
       };
 
-      const imageUrl = await PhotoUploadService.uploadPhotoToServer(photoData);
-      onUploadComplete(imageUrl);
+      const result = await EnhancedPhotoUploadService.uploadPhotoWithEdgeFunction(
+        photoData,
+        PhotoType.PROFILE
+      );
+
+      if (result.success && result.url) {
+        onUploadComplete(result.url);
+      } else {
+        throw new Error(result.error || 'Upload failed');
+      }
     } catch (error) {
       console.error('Upload error:', error);
       Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
@@ -139,48 +108,38 @@ export const PhotoUploadWithCrop: React.FC<PhotoUploadWithCropProps> = ({
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
-          <Text style={[styles.cancelText, { color: theme.colors.primary }]}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.colors.text }]}>Add Photo</Text>
-        <View style={styles.placeholder} />
+      <Text style={[styles.title, { color: theme.colors.text }]}>
+        Add Profile Photo
+      </Text>
+      
+      <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
+        Choose a photo from your gallery. You can crop it to fit perfectly.
+      </Text>
+
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Select Photo"
+          onPress={handleImageSelect}
+          disabled={isUploading}
+          style={styles.button}
+        />
+        
+        <Button
+          title="Cancel"
+          onPress={onCancel}
+          variant="secondary"
+          disabled={isUploading}
+          style={styles.button}
+        />
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.uploadArea}>
-          <Text style={[styles.uploadTitle, { color: theme.colors.text }]}>
-            Choose a Photo
+      {isUploading && (
+        <View style={styles.uploadingContainer}>
+          <Text style={[styles.uploadingText, { color: theme.colors.textSecondary }]}>
+            Uploading...
           </Text>
-          <Text style={[styles.uploadSubtitle, { color: theme.colors.textSecondary }]}>
-            Select a photo from your gallery or take a new one
-          </Text>
-          
-          <View style={styles.buttonContainer}>
-            <Button
-              title="📷 Take Photo"
-              onPress={takePhoto}
-              style={[styles.uploadButton, { backgroundColor: theme.colors.primary }]}
-              disabled={isUploading}
-            />
-            
-            <Button
-              title="🖼️ Choose from Gallery"
-              onPress={pickImage}
-              style={[styles.uploadButton, { backgroundColor: theme.colors.secondary }]}
-              disabled={isUploading}
-            />
-          </View>
         </View>
-
-        {isUploading && (
-          <View style={styles.uploadingContainer}>
-            <Text style={[styles.uploadingText, { color: theme.colors.textSecondary }]}>
-              Uploading photo...
-            </Text>
-          </View>
-        )}
-      </View>
+      )}
     </View>
   );
 };
@@ -188,62 +147,32 @@ export const PhotoUploadWithCrop: React.FC<PhotoUploadWithCropProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    padding: getResponsiveSpacing('lg'),
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: getResponsiveSpacing('md'),
-    paddingVertical: getResponsiveSpacing('sm'),
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    height: 60,
-  },
-  cancelButton: {
-    paddingHorizontal: getResponsiveSpacing('sm'),
-    paddingVertical: getResponsiveSpacing('xs'),
-  },
-  cancelText: {
-    fontSize: getResponsiveFontSize('md'),
   },
   title: {
     fontSize: getResponsiveFontSize('lg'),
-    fontWeight: '600',
-  },
-  placeholder: {
-    width: 60, // Same width as cancel button for centering
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: getResponsiveSpacing('lg'),
-  },
-  uploadArea: {
-    alignItems: 'center',
-    paddingVertical: getResponsiveSpacing('xl'),
-  },
-  uploadTitle: {
-    fontSize: getResponsiveFontSize('xl'),
     fontWeight: 'bold',
-    marginBottom: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('md'),
     textAlign: 'center',
   },
-  uploadSubtitle: {
+  description: {
     fontSize: getResponsiveFontSize('md'),
     textAlign: 'center',
-    marginBottom: getResponsiveSpacing('xl'),
+    marginBottom: getResponsiveSpacing('lg'),
     lineHeight: getResponsiveFontSize('md') * 1.4,
   },
   buttonContainer: {
     width: '100%',
     gap: getResponsiveSpacing('md'),
   },
-  uploadButton: {
-    paddingVertical: getResponsiveSpacing('md'),
+  button: {
+    marginVertical: getResponsiveSpacing('sm'),
   },
   uploadingContainer: {
+    marginTop: getResponsiveSpacing('md'),
     alignItems: 'center',
-    marginTop: getResponsiveSpacing('lg'),
   },
   uploadingText: {
     fontSize: getResponsiveFontSize('md'),

@@ -77,6 +77,11 @@ export const IconNames = {
   expand: 'expand-more' as const,
   collapse: 'expand-less' as const,
   
+  // Options Menu
+  markAsRead: 'mark-email-read' as const,
+  block: 'block' as const,
+  delete: 'delete' as const,
+  
   // Preferences
   visibility: 'visibility' as const,
   visibilityOff: 'visibility-off' as const,

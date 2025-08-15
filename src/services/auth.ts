@@ -238,13 +238,24 @@ export class AuthService {
 
   static async signIn(data: SignInData): Promise<{ user: SupabaseUser; profile: Profile }> {
     try {
+      console.log('🔐 Starting sign in process for:', data.email);
+      
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Sign in failed');
+      if (authError) {
+        console.error('❌ Auth error during sign in:', authError);
+        throw authError;
+      }
+      
+      if (!authData.user) {
+        console.error('❌ No user data returned from sign in');
+        throw new Error('Sign in failed - no user data received');
+      }
+
+      console.log('✅ User authenticated successfully:', authData.user.id);
 
       // Get user profile
       const { data: profileData, error: profileError } = await supabase
@@ -253,37 +264,83 @@ export class AuthService {
         .eq('user_id', authData.user.id)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('❌ Profile fetch error:', profileError);
+        throw new Error(`Profile not found: ${profileError.message}`);
+      }
+
+      if (!profileData) {
+        console.error('❌ No profile data found for user');
+        throw new Error('User profile not found');
+      }
+
+      console.log('✅ Profile fetched successfully');
 
       // Update online status
-      await supabase
+      const { error: onlineError } = await supabase
         .from('profiles')
-        .update({ is_online: true, last_seen: new Date().toISOString() })
+        .update({ 
+          is_online: true, 
+          last_seen: new Date().toISOString() 
+        })
         .eq('user_id', authData.user.id);
 
+      if (onlineError) {
+        console.warn('⚠️ Failed to update online status:', onlineError);
+        // Don't throw error for online status update failure
+      } else {
+        console.log('✅ Online status updated');
+      }
+
+      console.log('🎉 Sign in completed successfully');
       return {
         user: authData.user,
         profile: profileData,
       };
     } catch (error) {
+      console.error('❌ Sign in failed:', error);
       throw new Error(`Sign in failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   static async signOut(): Promise<void> {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
-      // Update online status to offline
+      console.log('🔐 Starting sign out process');
+      
+      // Get current user before signing out
       const { data: { user } } = await supabase.auth.getUser();
+      
       if (user) {
-        await supabase
+        console.log('👤 Signing out user:', user.id);
+        
+        // Update online status to offline first
+        const { error: onlineError } = await supabase
           .from('profiles')
-          .update({ is_online: false, last_seen: new Date().toISOString() })
+          .update({ 
+            is_online: false, 
+            last_seen: new Date().toISOString() 
+          })
           .eq('user_id', user.id);
+
+        if (onlineError) {
+          console.warn('⚠️ Failed to update online status during sign out:', onlineError);
+          // Continue with sign out even if online status update fails
+        } else {
+          console.log('✅ Online status set to offline');
+        }
       }
+
+      // Sign out from Supabase
+      const { error: signOutError } = await supabase.auth.signOut();
+      
+      if (signOutError) {
+        console.error('❌ Sign out error:', signOutError);
+        throw signOutError;
+      }
+
+      console.log('✅ Sign out completed successfully');
     } catch (error) {
+      console.error('❌ Sign out failed:', error);
       throw new Error(`Sign out failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

@@ -1,17 +1,19 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+import { usePlatform } from '../../hooks/usePlatform';
+import { useViewport } from '../../hooks/useViewport';
 import { EmojiGifService } from '../../services/emojiGifService';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
@@ -39,6 +41,10 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
   onStickerSelect,
 }) => {
   const theme = useTheme();
+  const { isWeb, isDesktopBrowser } = usePlatform();
+  const { isBreakpoint } = useViewport();
+  const isDesktop = isBreakpoint.xl || isDesktopBrowser;
+  
   const [activeTab, setActiveTab] = useState<TabType>('emoji');
   const [searchQuery, setSearchQuery] = useState('');
   const [gifs, setGifs] = useState<any[]>([]);
@@ -140,24 +146,46 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
         showHistory={true}
         showSectionTitles={true}
         showTabs={true}
-        columns={8}
+        columns={isDesktop ? 12 : 8}
       />
     </View>
   );
 
   const renderGifTab = () => (
     <View style={styles.tabContent}>
-      <View style={styles.searchContainer}>
+      <View style={[
+        styles.searchContainer,
+        isDesktop && styles.desktopSearchContainer
+      ]}>
         <TextInput
-          style={[styles.searchInput, { backgroundColor: theme.colors.surface }]}
+          style={[
+            styles.searchInput, 
+            { 
+              backgroundColor: theme.colors.surface,
+              fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
+              paddingHorizontal: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+              paddingVertical: isDesktop ? getResponsiveSpacing('md') : getResponsiveSpacing('sm'),
+              borderRadius: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+            }
+          ]}
           placeholder="Search GIFs..."
           placeholderTextColor={theme.colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={searchGifs}
         />
-        <TouchableOpacity style={styles.searchButton} onPress={searchGifs}>
-          <MaterialIcons name="search" size={20} color={theme.colors.primary} />
+        <TouchableOpacity 
+          style={[
+            styles.searchButton, 
+            isDesktop && styles.desktopSearchButton
+          ]} 
+          onPress={searchGifs}
+        >
+          <MaterialIcons 
+            name="search" 
+            size={isDesktop ? 24 : 20} 
+            color={theme.colors.primary} 
+          />
         </TouchableOpacity>
       </View>
       
@@ -169,12 +197,18 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.gifContainer} showsVerticalScrollIndicator={false}>
-          <View style={styles.gifGrid}>
+        <ScrollView style={styles.gifContainer} showsVerticalScrollIndicator={isDesktop}>
+          <View style={[
+            styles.gifGrid,
+            isDesktop && styles.desktopGifGrid
+          ]}>
             {gifs.map((gif, index) => (
               <TouchableOpacity
                 key={gif.id || index}
-                style={styles.gifItem}
+                style={[
+                  styles.gifItem,
+                  isDesktop && styles.desktopGifItem
+                ]}
                 onPress={() => handleGifPress(gif.url)}
               >
                 <Image source={{ uri: gif.url }} style={styles.gifImage} />
@@ -188,17 +222,39 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
 
   const renderStickerTab = () => (
     <View style={styles.tabContent}>
-      <View style={styles.searchContainer}>
+      <View style={[
+        styles.searchContainer,
+        isDesktop && styles.desktopSearchContainer
+      ]}>
         <TextInput
-          style={[styles.searchInput, { backgroundColor: theme.colors.surface }]}
+          style={[
+            styles.searchInput, 
+            { 
+              backgroundColor: theme.colors.surface,
+              fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
+              paddingHorizontal: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+              paddingVertical: isDesktop ? getResponsiveSpacing('md') : getResponsiveSpacing('sm'),
+              borderRadius: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+            }
+          ]}
           placeholder="Search stickers..."
           placeholderTextColor={theme.colors.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={searchStickers}
         />
-        <TouchableOpacity style={styles.searchButton} onPress={searchStickers}>
-          <MaterialIcons name="search" size={20} color={theme.colors.primary} />
+        <TouchableOpacity 
+          style={[
+            styles.searchButton, 
+            isDesktop && styles.desktopSearchButton
+          ]} 
+          onPress={searchStickers}
+        >
+          <MaterialIcons 
+            name="search" 
+            size={isDesktop ? 24 : 20} 
+            color={theme.colors.primary} 
+          />
         </TouchableOpacity>
       </View>
       
@@ -210,12 +266,18 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
           </Text>
         </View>
       ) : (
-        <ScrollView style={styles.gifContainer} showsVerticalScrollIndicator={false}>
-          <View style={styles.gifGrid}>
+        <ScrollView style={styles.gifContainer} showsVerticalScrollIndicator={isDesktop}>
+          <View style={[
+            styles.gifGrid,
+            isDesktop && styles.desktopGifGrid
+          ]}>
             {stickers.map((sticker, index) => (
               <TouchableOpacity
                 key={sticker.id || index}
-                style={styles.gifItem}
+                style={[
+                  styles.gifItem,
+                  isDesktop && styles.desktopGifItem
+                ]}
                 onPress={() => handleStickerPress(sticker.url)}
               >
                 <Image source={{ uri: sticker.url }} style={styles.gifImage} />
@@ -244,19 +306,23 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
     <TouchableOpacity
       style={[
         styles.tabButton,
-        activeTab === tab && { backgroundColor: theme.colors.primary }
+        activeTab === tab && { backgroundColor: theme.colors.primary },
+        isDesktop && styles.desktopTabButton
       ]}
       onPress={() => setActiveTab(tab)}
     >
       <MaterialIcons
         name={icon as any}
-        size={20}
+        size={isDesktop ? 24 : 20}
         color={activeTab === tab ? theme.colors.onPrimary : theme.colors.text}
       />
       <Text
         style={[
           styles.tabButtonText,
-          { color: activeTab === tab ? theme.colors.onPrimary : theme.colors.text }
+          { 
+            color: activeTab === tab ? theme.colors.onPrimary : theme.colors.text,
+            fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
+          }
         ]}
       >
         {label}
@@ -272,17 +338,46 @@ export const EmojiGifPicker: React.FC<EmojiGifPickerProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+        <View style={[
+          styles.modalContent, 
+          { 
+            backgroundColor: theme.colors.background,
+            maxWidth: isDesktop ? 800 : '100%',
+            maxHeight: isDesktop ? '80%' : '80%',
+          }
+        ]}>
+          <View style={[
+            styles.modalHeader,
+            isDesktop && styles.desktopModalHeader
+          ]}>
+            <Text style={[
+              styles.modalTitle, 
+              { 
+                color: theme.colors.text,
+                fontSize: isDesktop ? getResponsiveFontSize('xl') : getResponsiveFontSize('lg'),
+              }
+            ]}>
               Add Emoji, GIF, or Sticker
             </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <MaterialIcons name="close" size={24} color={theme.colors.text} />
+            <TouchableOpacity 
+              onPress={onClose} 
+              style={[
+                styles.closeButton,
+                isDesktop && styles.desktopCloseButton
+              ]}
+            >
+              <MaterialIcons 
+                name="close" 
+                size={isDesktop ? 28 : 24} 
+                color={theme.colors.text} 
+              />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.tabContainer}>
+          <View style={[
+            styles.tabContainer,
+            isDesktop && styles.desktopTabContainer
+          ]}>
             {renderTabButton('emoji', 'Emoji', 'emoji-emotions')}
             {renderTabButton('gif', 'GIF', 'gif')}
             {renderTabButton('sticker', 'Sticker', 'sticker-emoji')}
@@ -300,12 +395,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    alignItems: 'center', // Center on desktop
   },
   modalContent: {
     height: '80%',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: getResponsiveSpacing('md'),
+    width: '100%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -313,18 +410,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: getResponsiveSpacing('md'),
   },
+  desktopModalHeader: {
+    marginBottom: getResponsiveSpacing('lg'),
+  },
   modalTitle: {
-    fontSize: getResponsiveFontSize('lg'),
     fontWeight: 'bold',
   },
   closeButton: {
     padding: getResponsiveSpacing('sm'),
+  },
+  desktopCloseButton: {
+    padding: getResponsiveSpacing('md'),
   },
   tabContainer: {
     flexDirection: 'row',
     marginBottom: getResponsiveSpacing('md'),
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  desktopTabContainer: {
+    marginBottom: getResponsiveSpacing('lg'),
   },
   tabButton: {
     flex: 1,
@@ -334,9 +439,12 @@ const styles = StyleSheet.create({
     paddingVertical: getResponsiveSpacing('sm'),
     paddingHorizontal: getResponsiveSpacing('sm'),
   },
+  desktopTabButton: {
+    paddingVertical: getResponsiveSpacing('md'),
+    paddingHorizontal: getResponsiveSpacing('md'),
+  },
   tabButtonText: {
     marginLeft: getResponsiveSpacing('sm'),
-    fontSize: getResponsiveFontSize('sm'),
     fontWeight: '500',
   },
   tabContent: {
@@ -346,13 +454,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: getResponsiveSpacing('md'),
   },
+  desktopSearchContainer: {
+    marginBottom: getResponsiveSpacing('lg'),
+  },
   searchInput: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: getResponsiveSpacing('md'),
     marginRight: getResponsiveSpacing('sm'),
-    fontSize: getResponsiveFontSize('sm'),
   },
   searchButton: {
     width: 40,
@@ -361,6 +468,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  desktopSearchButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   loadingContainer: {
     flex: 1,
@@ -379,12 +491,21 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
+  desktopGifGrid: {
+    justifyContent: 'flex-start',
+    gap: getResponsiveSpacing('sm'),
+  },
   gifItem: {
     width: (screenWidth - 80) / 2,
     height: (screenWidth - 80) / 2,
     marginBottom: getResponsiveSpacing('sm'),
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  desktopGifItem: {
+    width: 180,
+    height: 180,
+    marginBottom: getResponsiveSpacing('md'),
   },
   gifImage: {
     width: '100%',

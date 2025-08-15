@@ -1,20 +1,23 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Dimensions, Modal, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useAuth } from '../../lib/AuthContext';
 import { Button } from '../../src/components/ui/Button';
 import { CreatePost } from '../../src/components/ui/CreatePost';
 import { ListItem } from '../../src/components/ui/ListItem';
+import { NearestCity } from '../../src/components/ui/NearestCity';
 import { PostCard } from '../../src/components/ui/PostCard';
 import { WebAlert } from '../../src/components/ui/WebAlert';
 import { usePlatform } from '../../src/hooks/usePlatform';
 import { AuthService } from '../../src/services/auth';
 import { CreatePostData, PostService } from '../../src/services/postService';
 import { Post, Profile } from '../../src/types';
-import { formatLocationForDisplay } from '../../src/utils/location';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../src/utils/responsive';
 import { useTheme } from '../../src/utils/themes';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Helper function to generate consistent random color based on user ID
 const generateRandomColor = (userId: string): string => {
@@ -50,6 +53,12 @@ export default function UserProfileScreen() {
   const [isMatched, setIsMatched] = useState(false);
   const [matchLevel, setMatchLevel] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'posts' | 'gallery' | 'info'>('posts');
+  
+  // Gallery modal state
+  const [galleryModalVisible, setGalleryModalVisible] = useState(false);
+  const [selectedGalleryImage, setSelectedGalleryImage] = useState<string | null>(null);
+  const [currentGalleryIndex, setCurrentGalleryIndex] = useState(0);
+  const [gallerySlideAnim] = useState(new Animated.Value(0));
 
   const isOwnProfile = currentUser?.id === userId;
 
@@ -289,13 +298,78 @@ export default function UserProfileScreen() {
   };
 
   const handleMessagePress = () => {
-    if (!isMatched) {
-      showAlert('Not Matched', 'You need to match with this user before you can message them.');
-      return;
+    if (isMatched) {
+      router.push(`/chat/${userId}`);
+    } else {
+      showAlert('Not Matched', 'You need to match with this user first to send messages.');
     }
-    
-    // Navigate to chat
-    router.push(`/chat/${userId}`);
+  };
+
+  // Gallery modal functions
+  const openGalleryModal = (imageUrl: string, index: number) => {
+    setSelectedGalleryImage(imageUrl);
+    setCurrentGalleryIndex(index);
+    setGalleryModalVisible(true);
+  };
+
+  const closeGalleryModal = () => {
+    setGalleryModalVisible(false);
+    setSelectedGalleryImage(null);
+    setCurrentGalleryIndex(0);
+    gallerySlideAnim.setValue(0);
+  };
+
+  const goToNextGalleryImage = () => {
+    if (profile?.photos && currentGalleryIndex < profile.photos.length - 1) {
+      const nextIndex = currentGalleryIndex + 1;
+      setCurrentGalleryIndex(nextIndex);
+      setSelectedGalleryImage(profile.photos[nextIndex]);
+    }
+  };
+
+  const goToPreviousGalleryImage = () => {
+    if (currentGalleryIndex > 0) {
+      const prevIndex = currentGalleryIndex - 1;
+      setCurrentGalleryIndex(prevIndex);
+      setSelectedGalleryImage(profile?.photos?.[prevIndex] || null);
+    }
+  };
+
+  const onGalleryGestureEvent = Animated.event(
+    [{ nativeEvent: { translationX: gallerySlideAnim } }],
+    { useNativeDriver: true }
+  );
+
+  const onGalleryHandlerStateChange = (event: any) => {
+    if (event.nativeEvent.state === State.END) {
+      const { translationX } = event.nativeEvent;
+      const threshold = screenWidth * 0.3;
+
+      if (translationX > threshold && currentGalleryIndex > 0) {
+        Animated.timing(gallerySlideAnim, {
+          toValue: screenWidth,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          goToPreviousGalleryImage();
+          gallerySlideAnim.setValue(0);
+        });
+      } else if (translationX < -threshold && profile?.photos && currentGalleryIndex < profile.photos.length - 1) {
+        Animated.timing(gallerySlideAnim, {
+          toValue: -screenWidth,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => {
+          goToNextGalleryImage();
+          gallerySlideAnim.setValue(0);
+        });
+      } else {
+        Animated.spring(gallerySlideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
   };
 
   useEffect(() => {
@@ -320,10 +394,8 @@ export default function UserProfileScreen() {
             </View>
           </View>
           <View style={styles.profileInfo}>
-            <View style={styles.avatarContainer}>
-              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
-                <Text style={[styles.avatarText, { color: '#fff' }]}>?</Text>
-              </View>
+            <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
+              <Text style={[styles.avatarText, { color: '#fff' }]}>?</Text>
             </View>
             <View style={styles.userDetails}>
               <Text style={[styles.userName, { color: theme.colors.text }]}>
@@ -387,26 +459,20 @@ export default function UserProfileScreen() {
             <Text style={[styles.userName, { color: theme.colors.text }]}>
               {fullName}
             </Text>
-            
-            <View style={styles.userMeta}>
-              {profile.birthdate && (
-                <Text style={[styles.userAge, { color: theme.colors.textSecondary }]}>
-                  {calculateAge(profile.birthdate)} years old
-                </Text>
-              )}
-              {profile.location && (
-                <Text style={[styles.userLocation, { color: theme.colors.textSecondary }]}>
-                  📍 {formatLocationForDisplay(profile.location, 'city-state')}
-                </Text>
-              )}
-            </View>
+            {/* Location Section */}
+            <NearestCity 
+                  showLoading={false}
+                  
+                />
 
-            {profile.bio && (
-              <Text style={[styles.userBio, { color: theme.colors.text }]}>
-                {profile.bio}
+            {/* Age Section */}
+            {profile.birthdate && (
+              <Text style={[styles.userAge, { color: theme.colors.textSecondary }]}>
+                {calculateAge(profile.birthdate)} years old
               </Text>
             )}
 
+            {/* Interests Section */}
             {profile.interests && profile.interests.length > 0 && (
               <View style={styles.interestsContainer}>
                 {profile.interests.slice(0, 5).map((interest, index) => (
@@ -423,24 +489,34 @@ export default function UserProfileScreen() {
                 )}
               </View>
             )}
-
-            {isMatched && matchLevel && (
-              <View style={[styles.matchStatusContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
-                <Text style={[styles.matchStatusText, { color: theme.colors.primary }]}>
-                  🎉 Matched! Level {matchLevel}
-                </Text>
-              </View>
-            )}
           </View>
         </View>
-
+          <View>
+            <View style={{ alignItems: 'center' }}>
+              {/* Bio Section */}
+              {profile.bio && (
+                <Text style={[styles.userBio, { color: theme.colors.text, textAlign: 'center' }]}>
+                  {profile.bio}
+                </Text>
+              )}
+            </View>
+            <View style={{ alignItems: 'center' }}>
+              {isMatched && matchLevel && (
+                <View style={[styles.matchStatusContainer, { backgroundColor: theme.colors.surfaceVariant }]}>
+                  <Text style={[styles.matchStatusText, { color: theme.colors.primary }]}>
+                    🎉 Matched! Level {matchLevel}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
         {/* Action Buttons */}
         <View style={styles.profileActions}>
+          
           {isOwnProfile ? (
             <Button
               title="Edit Profile"
               onPress={() => router.push('/profile')}
-              variant="outline"
               style={styles.actionButton}
             />
           ) : (
@@ -552,29 +628,66 @@ export default function UserProfileScreen() {
       case 'gallery':
         return (
           <View style={styles.galleryContainer}>
-            <Text style={[styles.galleryTitle, { color: theme.colors.text }]}>
-              Photo Gallery
-            </Text>
+            <View style={styles.galleryHeader}>
+              <Text style={[styles.galleryTitle, { color: theme.colors.text }]}>
+                Photo Gallery
+              </Text>
+              {profile?.photos && profile.photos.length > 0 && (
+                <TouchableOpacity
+                  style={styles.viewGalleryButton}
+                  onPress={() => openGalleryModal(profile.photos[0], 0)}
+                >
+                  <Text style={[styles.viewGalleryText, { color: theme.colors.primary }]}>
+                    View Full Gallery
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
             {profile?.photos && profile.photos.length > 0 ? (
-              <View style={styles.galleryGrid}>
-                {profile.photos.map((photo, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.galleryItem}
-                    onPress={() => handleImagePress(photo, index)}
-                  >
-                    <Image
-                      source={{ uri: photo }}
-                      style={styles.galleryImage}
-                      contentFit="cover"
-                    />
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.galleryPreview}>
+                <Text style={[styles.gallerySubtitle, { color: theme.colors.textSecondary }]}>
+                  Preview ({profile.photos.length} photos)
+                </Text>
+                <View style={styles.galleryGrid}>
+                  {profile.photos.slice(0, 4).map((photo, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.galleryItem}
+                      onPress={() => openGalleryModal(photo, index)}
+                    >
+                      <Image
+                        source={{ uri: photo }}
+                        style={styles.galleryImage}
+                        contentFit="cover"
+                      />
+                      {index === 3 && profile.photos.length > 4 && (
+                        <View style={styles.morePhotosOverlay}>
+                          <Text style={styles.morePhotosText}>
+                            +{profile.photos.length - 4}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
             ) : (
-              <Text style={[styles.noPhotosText, { color: theme.colors.textSecondary }]}>
-                No photos available
-              </Text>
+              <View style={styles.noPhotosContainer}>
+                <Text style={[styles.noPhotosText, { color: theme.colors.textSecondary }]}>
+                  No photos available
+                </Text>
+                {isOwnProfile && (
+                  <TouchableOpacity
+                    style={styles.addPhotosButton}
+                    onPress={() => router.push('/profile')}
+                  >
+                    <Text style={[styles.addPhotosText, { color: theme.colors.primary }]}>
+                      Add Photos
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           </View>
         );
@@ -596,7 +709,6 @@ export default function UserProfileScreen() {
                 </Text>
               </View>
             )}
-            
             {profile?.interests && profile.interests.length > 0 && (
               <View style={styles.infoSection}>
                 <Text style={[styles.infoSectionTitle, { color: theme.colors.text }]}>
@@ -613,7 +725,6 @@ export default function UserProfileScreen() {
                 </View>
               </View>
             )}
-            
             <View style={styles.infoSection}>
               <Text style={[styles.infoSectionTitle, { color: theme.colors.text }]}>
                 Details
@@ -633,9 +744,9 @@ export default function UserProfileScreen() {
                   <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
                     Location:
                   </Text>
-                  <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-                    {formatLocationForDisplay(profile.location, 'city-state')}
-                  </Text>
+                  <View style={styles.locationDisplay}>
+                    <NearestCity />
+                  </View>
                 </View>
               )}
             </View>
@@ -646,7 +757,6 @@ export default function UserProfileScreen() {
         return null;
     }
   };
-
   const renderPost = ({ item }: { item: Post }) => (
     <PostCard
       post={item}
@@ -663,7 +773,6 @@ export default function UserProfileScreen() {
       onEditComment={handleEditComment}
     />
   );
-
   const renderEmptyPosts = () => (
     <ListItem style={styles.emptyState}>
       <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
@@ -695,7 +804,6 @@ export default function UserProfileScreen() {
       </View>
     );
   }
-
   if (showCreatePost) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -708,7 +816,6 @@ export default function UserProfileScreen() {
       </View>
     );
   }
-
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView
@@ -742,6 +849,104 @@ export default function UserProfileScreen() {
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
+
+      {/* Gallery Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={galleryModalVisible}
+        onRequestClose={closeGalleryModal}
+      >
+        <StatusBar hidden={true} />
+        <GestureHandlerRootView style={styles.galleryModalContainer}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.galleryCloseButton}
+            onPress={closeGalleryModal}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.galleryCloseButtonText}>✕</Text>
+          </TouchableOpacity>
+
+          {/* Navigation Buttons */}
+          {profile?.photos && profile.photos.length > 1 && (
+            <>
+              {currentGalleryIndex > 0 && (
+                <TouchableOpacity
+                  style={[styles.galleryNavButton, styles.galleryPrevButton]}
+                  onPress={goToPreviousGalleryImage}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.galleryNavButtonText}>‹</Text>
+                </TouchableOpacity>
+              )}
+              
+              {currentGalleryIndex < profile.photos.length - 1 && (
+                <TouchableOpacity
+                  style={[styles.galleryNavButton, styles.galleryNextButton]}
+                  onPress={goToNextGalleryImage}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.galleryNavButtonText}>›</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+
+          {/* Image Counter */}
+          {profile?.photos && profile.photos.length > 1 && (
+            <View style={styles.galleryImageCounter}>
+              <Text style={styles.galleryImageCounterText}>
+                {currentGalleryIndex + 1} / {profile.photos.length}
+              </Text>
+            </View>
+          )}
+          
+          {/* Main Image with Gesture Handler */}
+          <PanGestureHandler
+            onGestureEvent={onGalleryGestureEvent}
+            onHandlerStateChange={onGalleryHandlerStateChange}
+          >
+            <Animated.View
+              style={[
+                styles.galleryImageContainer,
+                {
+                  transform: [{ translateX: gallerySlideAnim }]
+                }
+              ]}
+            >
+              <ScrollView
+                style={styles.galleryImageScrollView}
+                contentContainerStyle={styles.galleryImageScrollContent}
+                showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}
+                maximumZoomScale={3}
+                minimumZoomScale={1}
+              >
+                <Image
+                  source={{ uri: selectedGalleryImage || '' }}
+                  style={styles.galleryFullScreenImage}
+                  contentFit="contain"
+                  placeholder="Loading..."
+                  placeholderContentFit="contain"
+                />
+              </ScrollView>
+            </Animated.View>
+          </PanGestureHandler>
+
+          {/* Swipe Areas for Navigation */}
+          <TouchableOpacity
+            style={styles.galleryLeftSwipeArea}
+            onPress={() => goToPreviousGalleryImage()}
+            activeOpacity={0}
+          />
+          <TouchableOpacity
+            style={styles.galleryRightSwipeArea}
+            onPress={() => goToNextGalleryImage()}
+            activeOpacity={0}
+          />
+        </GestureHandlerRootView>
+      </Modal>
     </View>
   );
 }
@@ -749,18 +954,22 @@ export default function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f0f2f5',
   },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
-    padding: 0, // Remove padding to make banner full width
+    padding: 0,
+    backgroundColor: '#f0f2f5',
   },
   bannerContainer: {
-    height: 200,
+    height: 250, // Facebook-style cover photo height
     width: '100%',
-    marginBottom: 0, // Remove margin to make it flush
+    marginBottom: 0,
+    position: 'relative',
+    overflow: 'hidden',
   },
   banner: {
     width: '100%',
@@ -776,12 +985,141 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFontSize('md'),
     fontWeight: '500',
   },
+  profileHeader: {
+    padding: 0,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  profileInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start', // Align to top
+    marginTop: getResponsiveSpacing('md'), // Positive margin - no overlap
+    marginBottom: getResponsiveSpacing('lg'),
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    flexWrap: 'wrap',
+    maxWidth: '100%',
+    overflow: 'hidden',
+  },
+  avatarContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: '#fff',
+    overflow: 'hidden',
+    marginRight: getResponsiveSpacing('lg'),
+    marginBottom: getResponsiveSpacing('sm'),
+    flexShrink: 0,
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 50,
+  },
+  avatarText: {
+    fontSize: getResponsiveFontSize('xl'),
+    fontWeight: 'bold',
+  },
+  userDetails: {
+    flex: 1,
+    marginLeft: getResponsiveSpacing('md'),
+  },
+  userName: {
+    fontSize: getResponsiveFontSize('xl'),
+    fontWeight: 'bold',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  locationSection: {
+    marginBottom: 0,
+  },
+  userLocation: {
+    fontSize: getResponsiveFontSize('md'),
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  userAge: {
+    fontSize: getResponsiveFontSize('md'),
+    marginBottom: getResponsiveSpacing('md'),
+    color: '#666',
+  },
+  userBio: {
+    fontSize: getResponsiveFontSize('md'),
+    lineHeight: getResponsiveFontSize('md') * 1.4,
+    marginTop: getResponsiveSpacing('md'),
+    marginBottom: getResponsiveSpacing('lg'),
+    textAlign: 'center',
+    paddingHorizontal: getResponsiveSpacing('md'),
+  },
+  interestsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  interest: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('lg'),
+    marginBottom: getResponsiveSpacing('xs'),
+    maxWidth: '100%',
+    backgroundColor: '#e7f3ff',
+  },
+  interestText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+    color: '#1877f2',
+  },
+  moreInterests: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontStyle: 'italic',
+  },
+  matchStatusContainer: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('lg'),
+    alignSelf: 'flex-start',
+  },
+  matchStatusText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+  },
+  profileActions: {
+    marginTop: getResponsiveSpacing('lg'),
+    paddingHorizontal: getResponsiveSpacing('lg'),
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: getResponsiveSpacing('md'),
+  },
+  actionButton: {
+    flex: 1,
+    borderRadius: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    // Remove blue background - let the Button component handle its own styling
+  },
   tabsContainer: {
     flexDirection: 'row',
     marginBottom: getResponsiveSpacing('lg'),
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    paddingHorizontal: getResponsiveSpacing('md'), // Add horizontal padding for tabs
+    borderBottomColor: '#e4e6eb',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    backgroundColor: '#fff',
   },
   tab: {
     flex: 1,
@@ -791,20 +1129,41 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#007AFF',
+    borderBottomColor: '#1877f2',
   },
   tabText: {
     fontSize: getResponsiveFontSize('md'),
     fontWeight: '600',
+    color: '#65676b',
   },
   galleryContainer: {
     paddingVertical: getResponsiveSpacing('md'),
     paddingHorizontal: getResponsiveSpacing('md'), // Add horizontal padding for gallery
   },
+  galleryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('md'),
+  },
   galleryTitle: {
     fontSize: getResponsiveFontSize('lg'),
     fontWeight: 'bold',
+  },
+  viewGalleryButton: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+  },
+  viewGalleryText: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+  },
+  galleryPreview: {
     marginBottom: getResponsiveSpacing('md'),
+  },
+  gallerySubtitle: {
+    fontSize: getResponsiveFontSize('md'),
+    marginBottom: getResponsiveSpacing('sm'),
   },
   galleryGrid: {
     flexDirection: 'row',
@@ -816,15 +1175,44 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: getResponsiveSpacing('sm'),
     overflow: 'hidden',
+    position: 'relative',
   },
   galleryImage: {
     width: '100%',
     height: '100%',
   },
+  morePhotosOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('xs'),
+    paddingVertical: getResponsiveSpacing('xs'),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  morePhotosText: {
+    color: '#fff',
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: 'bold',
+  },
+  noPhotosContainer: {
+    alignItems: 'center',
+    paddingVertical: getResponsiveSpacing('xl'),
+  },
   noPhotosText: {
     fontSize: getResponsiveFontSize('md'),
     textAlign: 'center',
-    paddingVertical: getResponsiveSpacing('xl'),
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  addPhotosButton: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+  },
+  addPhotosText: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
   },
   infoContainer: {
     paddingVertical: getResponsiveSpacing('md'),
@@ -882,106 +1270,6 @@ const styles = StyleSheet.create({
   viewMoreText: {
     fontSize: getResponsiveFontSize('md'),
     fontWeight: '600',
-  },
-  profileHeader: {
-    padding: 0, // Remove padding to make banner full width
-  },
-  profileInfo: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginTop: -50,
-    marginBottom: getResponsiveSpacing('md'),
-    paddingHorizontal: getResponsiveSpacing('md'), // Add horizontal padding for user details
-  },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 4,
-    borderColor: '#fff',
-    overflow: 'hidden',
-    marginRight: getResponsiveSpacing('md'),
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 50,
-  },
-  avatarText: {
-    fontSize: getResponsiveFontSize('xl'),
-    fontWeight: 'bold',
-  },
-  userDetails: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: getResponsiveFontSize('xl'),
-    fontWeight: 'bold',
-    marginBottom: getResponsiveSpacing('xs'),
-  },
-  userMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: getResponsiveSpacing('sm'),
-  },
-  userAge: {
-    fontSize: getResponsiveFontSize('md'),
-    marginRight: getResponsiveSpacing('md'),
-  },
-  userLocation: {
-    fontSize: getResponsiveFontSize('md'),
-  },
-  userBio: {
-    fontSize: getResponsiveFontSize('md'),
-    lineHeight: getResponsiveFontSize('md') * 1.4,
-    marginBottom: getResponsiveSpacing('sm'),
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginBottom: getResponsiveSpacing('sm'),
-  },
-  interest: {
-    paddingHorizontal: getResponsiveSpacing('sm'),
-    paddingVertical: getResponsiveSpacing('xs'),
-    borderRadius: getResponsiveSpacing('lg'),
-    marginRight: getResponsiveSpacing('xs'),
-    marginBottom: getResponsiveSpacing('xs'),
-  },
-  interestText: {
-    fontSize: getResponsiveFontSize('sm'),
-    fontWeight: '500',
-  },
-  moreInterests: {
-    fontSize: getResponsiveFontSize('sm'),
-    fontStyle: 'italic',
-  },
-  matchStatusContainer: {
-    paddingHorizontal: getResponsiveSpacing('md'),
-    paddingVertical: getResponsiveSpacing('sm'),
-    borderRadius: getResponsiveSpacing('lg'),
-    alignSelf: 'flex-start',
-  },
-  matchStatusText: {
-    fontSize: getResponsiveFontSize('sm'),
-    fontWeight: '600',
-  },
-  profileActions: {
-    marginTop: getResponsiveSpacing('md'),
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: getResponsiveSpacing('sm'),
-  },
-  actionButton: {
-    flex: 1,
   },
   postsHeader: {
     flexDirection: 'row',
@@ -1051,5 +1339,113 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: getResponsiveFontSize('md'),
     marginTop: getResponsiveSpacing('sm'),
+  },
+  locationDisplay: {
+    marginLeft: getResponsiveSpacing('md'),
+  },
+  locationWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  divider: {
+    height: 1,
+    marginVertical: getResponsiveSpacing('md'),
+  },
+  // Gallery Modal Styles
+  galleryModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryCloseButton: {
+    position: 'absolute',
+    top: getResponsiveSpacing('lg'),
+    right: getResponsiveSpacing('lg'),
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  galleryCloseButtonText: {
+    color: '#fff',
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: 'bold',
+  },
+  galleryNavButton: {
+    position: 'absolute',
+    top: '50%',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    transform: [{ translateY: -25 }],
+  },
+  galleryPrevButton: {
+    left: getResponsiveSpacing('md'),
+  },
+  galleryNextButton: {
+    right: getResponsiveSpacing('md'),
+  },
+  galleryNavButtonText: {
+    color: '#fff',
+    fontSize: getResponsiveFontSize('xl'),
+    fontWeight: 'bold',
+  },
+  galleryImageCounter: {
+    position: 'absolute',
+    top: getResponsiveSpacing('lg'),
+    left: getResponsiveSpacing('lg'),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: 20,
+    zIndex: 1000,
+  },
+  galleryImageCounterText: {
+    color: '#fff',
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+  },
+  galleryImageContainer: {
+    flex: 1,
+    width: screenWidth,
+  },
+  galleryImageScrollView: {
+    flex: 1,
+  },
+  galleryImageScrollContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryFullScreenImage: {
+    width: screenWidth,
+    height: screenHeight,
+  },
+  galleryLeftSwipeArea: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: screenWidth * 0.3,
+    height: screenHeight,
+    zIndex: 500,
+  },
+  galleryRightSwipeArea: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: screenWidth * 0.3,
+    height: screenHeight,
+    zIndex: 500,
   },
 }); 

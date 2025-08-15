@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../lib/AuthContext';
-import { OnlineStatus, RealtimeChatService, RealtimeMessage, TypingIndicator } from '../services/realtimeChat';
+import { ImageUploadData, OnlineStatus, RealtimeChatService, RealtimeMessage, TypingIndicator } from '../services/realtimeChat';
 import { MessageType } from '../types';
 
 export interface UseRealtimeChatOptions {
@@ -17,7 +17,8 @@ export interface UseRealtimeChatOptions {
 export interface UseRealtimeChatReturn {
   // Messages
   messages: RealtimeMessage[];
-  sendMessage: (content: string, messageType?: MessageType) => Promise<void>;
+  sendMessage: (content: string, messageType?: MessageType, metadata?: any) => Promise<void>;
+  sendImageMessage: (imageData: ImageUploadData, caption?: string, metadata?: any) => Promise<void>;
   isLoading: boolean;
   error: string | null;
   
@@ -327,7 +328,7 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
   }, [user?.id]);
 
   // Send message
-  const sendMessage = useCallback(async (content: string, messageType: MessageType = MessageType.TEXT) => {
+  const sendMessage = useCallback(async (content: string, messageType: MessageType = MessageType.TEXT, metadata?: any) => {
     if (!content.trim() || !user?.id) return;
 
     try {
@@ -336,7 +337,8 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
       const message = await realtimeService.current.sendMessage(
         options.conversationId,
         content.trim(),
-        messageType
+        messageType,
+        metadata
       );
 
       // Stop typing indicator
@@ -348,6 +350,32 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
     } catch (err) {
       console.error('❌ Failed to send message:', err);
       setError(err instanceof Error ? err.message : 'Failed to send message');
+    }
+  }, [user?.id, options.conversationId, options.enableTypingIndicators]);
+
+  // Send image message with UUID-based filename
+  const sendImageMessage = useCallback(async (imageData: ImageUploadData, caption?: string, metadata?: any) => {
+    if (!user?.id) return;
+
+    try {
+      setError(null);
+      
+      const message = await realtimeService.current.sendMessageWithImage(
+        options.conversationId,
+        imageData,
+        caption,
+        metadata
+      );
+
+      // Stop typing indicator
+      if (options.enableTypingIndicators) {
+        await sendTypingIndicator(false);
+      }
+
+      console.log('✅ Image message sent:', message.id);
+    } catch (err) {
+      console.error('❌ Failed to send image message:', err);
+      setError(err instanceof Error ? err.message : 'Failed to send image message');
     }
   }, [user?.id, options.conversationId, options.enableTypingIndicators]);
 
@@ -442,6 +470,7 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
     // Messages
     messages,
     sendMessage,
+    sendImageMessage,
     isLoading,
     error,
     

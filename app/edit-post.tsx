@@ -1,14 +1,14 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { LocationPicker } from '../src/components/ui/LocationPicker';
 import { WebAlert } from '../src/components/ui/WebAlert';
 import { usePlatform } from '../src/hooks/usePlatform';
-import { PhotoUploadService } from '../src/services/photoUpload';
+import { EnhancedPhotoUploadService } from '../src/services/enhancedPhotoUpload';
 import { PostService, UpdatePostData } from '../src/services/postService';
 import { Post } from '../src/types';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../src/utils/responsive';
@@ -62,7 +62,7 @@ export default function EditPostScreen() {
         return;
       }
 
-      const hasPermission = await PhotoUploadService.requestPermissions();
+      const hasPermission = await EnhancedPhotoUploadService.requestPermissions();
       if (!hasPermission) return;
 
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -97,7 +97,7 @@ export default function EditPostScreen() {
         return;
       }
 
-      const hasPermission = await PhotoUploadService.requestPermissions();
+      const hasPermission = await EnhancedPhotoUploadService.requestPermissions();
       if (!hasPermission) return;
 
       const result = await ImagePicker.launchCameraAsync({

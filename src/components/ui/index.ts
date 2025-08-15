@@ -26,6 +26,7 @@ export { LocationSettings } from './LocationSettings';
 export { IconNames, MaterialIcon } from './MaterialIcon';
 export { MobileMatchCard } from './MobileMatchCard';
 export { MobileToolbar } from './MobileToolbar';
+export { NearestCity } from './NearestCity';
 export { PhotoGallery } from './PhotoGallery';
 export { PostCard } from './PostCard';
 export { RangeSlider } from './RangeSlider';

@@ -1,5 +1,6 @@
-import React from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../utils/themes';
 
 interface InputProps {
@@ -14,6 +15,7 @@ interface InputProps {
   multiline?: boolean;
   numberOfLines?: number;
   style?: any;
+  showPasswordToggle?: boolean;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -28,8 +30,18 @@ export const Input: React.FC<InputProps> = ({
   multiline = false,
   numberOfLines = 1,
   style,
+  showPasswordToggle = false,
 }) => {
   const theme = useTheme();
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Determine if we should show password toggle
+  const shouldShowToggle = showPasswordToggle && secureTextEntry;
+  const isPasswordVisible = shouldShowToggle ? showPassword : !secureTextEntry;
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
 
   const inputStyle = [
     styles.input,
@@ -39,6 +51,7 @@ export const Input: React.FC<InputProps> = ({
       color: theme.colors.text,
       paddingVertical: multiline ? theme.spacing.md : theme.spacing.sm,
       minHeight: multiline ? numberOfLines * 24 : 48,
+      paddingRight: shouldShowToggle ? 50 : 16, // Extra padding for toggle button
     },
     disabled && { opacity: 0.6 },
     style,
@@ -46,20 +59,41 @@ export const Input: React.FC<InputProps> = ({
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={inputStyle}
-        placeholder={placeholder}
-        placeholderTextColor={theme.colors.textSecondary}
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry}
-        keyboardType={keyboardType}
-        autoCapitalize={autoCapitalize}
-        editable={!disabled}
-        multiline={multiline}
-        numberOfLines={numberOfLines}
-        textAlignVertical={multiline ? 'top' : 'center'}
-      />
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={inputStyle}
+          placeholder={placeholder}
+          placeholderTextColor={theme.colors.textSecondary}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={!isPasswordVisible}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          editable={!disabled}
+          multiline={multiline}
+          numberOfLines={numberOfLines}
+          textAlignVertical={multiline ? 'top' : 'center'}
+        />
+        {shouldShowToggle && (
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              }
+            ]}
+            onPress={togglePasswordVisibility}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons
+              name={isPasswordVisible ? 'visibility' : 'visibility-off'}
+              size={20}
+              color={theme.colors.textSecondary}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
       {error && (
         <Text style={[styles.errorText, { color: theme.colors.error }]}>
           {error}
@@ -73,11 +107,26 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
   },
+  inputContainer: {
+    position: 'relative',
+  },
   input: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
+  },
+  toggleButton: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    transform: [{ translateY: -12 }],
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   errorText: {
     fontSize: 14,

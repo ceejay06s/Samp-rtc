@@ -2,8 +2,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { EnhancedPhotoUploadService } from '../../services/enhancedPhotoUpload';
 import { LocationData } from '../../services/locationService';
-import { PhotoUploadService } from '../../services/photoUpload';
 import { CreatePostData } from '../../services/postService';
 import { Profile } from '../../types';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
@@ -56,7 +56,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({
         return;
       }
 
-      const hasPermission = await PhotoUploadService.requestPermissions();
+      const hasPermission = await EnhancedPhotoUploadService.requestPermissions();
       if (!hasPermission) return;
 
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -91,7 +91,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({
         return;
       }
 
-      const hasPermission = await PhotoUploadService.requestPermissions();
+      const hasPermission = await EnhancedPhotoUploadService.requestPermissions();
       if (!hasPermission) return;
 
       const result = await ImagePicker.launchCameraAsync({

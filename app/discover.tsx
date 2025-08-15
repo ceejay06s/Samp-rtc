@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, Image, Modal, PanResponder, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { ListItem } from '../src/components/ui/ListItem';
 import { IconNames, MaterialIcon } from '../src/components/ui/MaterialIcon';
+import { NearestCity } from '../src/components/ui/NearestCity';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
 import { DiscoveryFilters, MatchingService } from '../src/services/matching';
@@ -317,7 +318,13 @@ export default function DiscoverScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.backButton, { color: theme.colors.primary }]}>← Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+            <NearestCity 
+              showLoading={false}
+              style={styles.locationDisplay}
+            />
+          </View>
           <View style={{ width: 50 }} />
         </View>
         
@@ -339,7 +346,13 @@ export default function DiscoverScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.backButton, { color: theme.colors.primary }]}>← Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+            <NearestCity 
+              showLoading={false}
+              style={styles.locationDisplay}
+            />
+          </View>
           <View style={{ width: 50 }} />
         </View>
         
@@ -361,7 +374,13 @@ export default function DiscoverScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.backButton, { color: theme.colors.primary }]}>← Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+            <NearestCity 
+              showLoading={false}
+              style={styles.locationDisplay}
+            />
+          </View>
           <View style={{ width: 50 }} />
         </View>
         
@@ -391,7 +410,13 @@ export default function DiscoverScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.backButton, { color: theme.colors.primary }]}>← Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+            <NearestCity 
+              showLoading={false}
+              style={styles.locationDisplay}
+            />
+          </View>
           <View style={{ width: 50 }} />
         </View>
         
@@ -436,7 +461,13 @@ export default function DiscoverScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={[styles.backButton, { color: theme.colors.primary }]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
+          <NearestCity 
+            showLoading={false}
+            style={styles.locationDisplay}
+          />
+        </View>
         <TouchableOpacity onPress={() => router.push('/preferences')}>
           <MaterialIcon name={IconNames.settings} size={24} color={theme.colors.primary} />
         </TouchableOpacity>
@@ -706,6 +737,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 10,
   },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   backButton: {
     fontSize: 16,
     fontWeight: '600',
@@ -713,6 +749,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  locationDisplay: {
+    marginLeft: 10,
   },
   settingsButton: {
     fontSize: 20,

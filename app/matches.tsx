@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
+import { useNavigationTracking } from '../src/hooks/useNavigationTracking';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
 import { MatchingService } from '../src/services/matching';
@@ -17,6 +18,9 @@ export default function MatchesScreen() {
   const { isWeb } = usePlatform();
   const { isBreakpoint } = useViewport();
   const isDesktop = isBreakpoint.xl || isWeb;
+  
+  // Track navigation for referrer functionality
+  useNavigationTracking();
 
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);

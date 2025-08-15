@@ -1,18 +1,21 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { AppState, AppStateStatus } from 'react-native'
 import { useAutoLocation } from '../src/hooks/useAutoLocation'
+import { AuthStateService } from '../src/services/authStateService'
 import { Profile } from '../src/types'
-import { onAuthStateChange } from './auth'
-import { supabase } from './supabase'
 
 interface AuthContextType {
   user: any
   profile: Profile | null
   loading: boolean
+  isAuthenticated: boolean
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
   locationSharing: boolean
   setLocationSharing: (enabled: boolean) => void
   manualLocationUpdate: () => void
+  lastLoginTime: string | null
+  sessionExpiry: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -21,6 +24,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [lastLoginTime, setLastLoginTime] = useState<string | null>(null)
+  const [sessionExpiry, setSessionExpiry] = useState<string | null>(null)
   const [locationSharing, setLocationSharing] = useState(true) // Default to enabled for dating app
 
   // Auto-location hook - automatically updates location when sharing is enabled
@@ -45,79 +51,94 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
 
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single()
-
-      if (error) {
-        console.error('Error fetching profile:', error)
-        setProfile(null)
-      } else {
-        setProfile(profileData)
-        // Log current location if available
-        if (profileData.latitude && profileData.longitude) {
-          console.log('👤 User profile location:', {
-            latitude: profileData.latitude,
-            longitude: profileData.longitude,
-            location: profileData.location
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error)
-      setProfile(null)
-    }
-  }
-
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
-      } else {
-        setProfile(null)
-      }
-      setLoading(false)
-    })
+    const authService = AuthStateService.getInstance();
+    
+    // Subscribe to auth state changes
+    const unsubscribe = authService.addListener((authState) => {
+      setUser(authState.user);
+      setProfile(authState.profile);
+      setLoading(authState.loading);
+      setIsAuthenticated(authState.isAuthenticated);
+      setLastLoginTime(authState.lastLoginTime);
+      setSessionExpiry(authState.sessionExpiry);
+    });
 
-    // Listen for auth changes
-    const { data: { subscription } } = onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
-      } else {
-        setProfile(null)
-      }
-      setLoading(false)
-    })
+    // Cleanup subscription on unmount
+    return unsubscribe;
+  }, []);
 
-    return () => subscription.unsubscribe()
-  }, [])
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let lastUpdate = 0;
+    const updateInterval = 5000; // 5 seconds minimum between updates
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (!user) return
+
+      const now = Date.now();
+      if (now - lastUpdate < updateInterval) {
+        console.log('⏰ App state change skipped - too recent');
+        return;
+      }
+
+      if (nextAppState === 'active') {
+        // App came to foreground - set user as active
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(async () => {
+          await AuthStateService.getInstance().setOnlineStatus(true);
+          console.log('📱 App became active - user set as online')
+          lastUpdate = Date.now();
+        }, 1000); // 1 second delay
+      } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // App went to background - set user as inactive
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(async () => {
+          await AuthStateService.getInstance().setOnlineStatus(false);
+          console.log('📱 App went to background - user set as offline')
+          lastUpdate = Date.now();
+        }, 1000); // 1 second delay
+      }
+    }
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange)
+
+    return () => {
+      subscription?.remove()
+      clearTimeout(timeoutId)
+    }
+  }, [user])
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    try {
+      console.log('🔐 AuthContext: Starting sign out process');
+      await AuthStateService.getInstance().signOut();
+      console.log('✅ AuthContext: Sign out completed successfully');
+      console.log('🧹 AuthContext: Session and state cleared');
+    } catch (error) {
+      console.error('❌ AuthContext: Error during sign out:', error);
+      // Re-throw the error so components can handle it appropriately
+      throw error;
+    }
   }
 
   const refreshProfile = async () => {
-    if (user) {
-      await fetchUserProfile(user.id)
-    }
+    await AuthStateService.getInstance().refreshProfile();
   }
 
   const value = {
     user,
     profile,
     loading,
+    isAuthenticated,
     signOut,
     refreshProfile,
     locationSharing,
     setLocationSharing,
     manualLocationUpdate,
+    lastLoginTime,
+    sessionExpiry,
   }
 
   return (

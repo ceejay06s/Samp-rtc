@@ -2,20 +2,22 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useRTPChat } from '../../hooks/useRTPChat';
 import { MatchLevel, MessageType } from '../../types';
+import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
+import { EmojiGifPicker } from './EmojiGifPicker';
 
 interface EnhancedChatScreenProps {
   conversationId: string;
@@ -33,6 +35,8 @@ export const EnhancedChatScreen: React.FC<EnhancedChatScreenProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<{ type: 'gif' | 'sticker', url: string } | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
@@ -172,10 +176,57 @@ export const EnhancedChatScreen: React.FC<EnhancedChatScreenProps> = ({
 
   // Send message
   const handleSendMessage = async () => {
-    if (!messageText.trim() || isSending) return;
+    if (!messageText.trim() && !selectedMedia || isSending) return;
 
-    await sendMessage(messageText.trim());
-    setMessageText('');
+    try {
+      if (selectedMedia) {
+        // Send media message
+        await sendMessage(selectedMedia.url, selectedMedia.type === 'gif' ? MessageType.GIF : MessageType.STICKER);
+      } else {
+        // Send text message
+        await sendMessage(messageText.trim());
+      }
+      setMessageText('');
+      setSelectedMedia(null);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageText(prev => prev + emoji);
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    setSelectedMedia({ type: 'gif', url: gifUrl });
+    setShowEmojiPicker(false);
+  };
+
+  const handleStickerSelect = (stickerUrl: string) => {
+    setSelectedMedia({ type: 'sticker', url: stickerUrl });
+    setShowEmojiPicker(false);
+  };
+
+  const clearSelectedMedia = () => {
+    setSelectedMedia(null);
+  };
+
+  const renderMediaPreview = () => {
+    if (!selectedMedia) return null;
+
+    return (
+      <View style={styles.mediaPreviewContainer}>
+        <View style={styles.mediaPreview}>
+          <Text style={[styles.mediaPreviewText, { color: theme.colors.textSecondary }]}>
+            {selectedMedia.type === 'gif' ? '🎬 GIF' : '🎯 Sticker'} selected
+          </Text>
+          <TouchableOpacity onPress={clearSelectedMedia} style={styles.clearMediaButton}>
+            <MaterialIcons name="close" size={16} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   // Format recording duration
@@ -311,7 +362,16 @@ export const EnhancedChatScreen: React.FC<EnhancedChatScreenProps> = ({
           </View>
         )}
 
+        {renderMediaPreview()}
+
         <View style={styles.inputRow}>
+          <TouchableOpacity
+            style={styles.emojiButton}
+            onPress={() => setShowEmojiPicker(true)}
+          >
+            <MaterialIcons name="emoji-emotions" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+
           <TextInput
             style={[styles.textInput, { 
               backgroundColor: theme.colors.surface,
@@ -358,13 +418,13 @@ export const EnhancedChatScreen: React.FC<EnhancedChatScreenProps> = ({
             style={[
               styles.sendButton,
               { 
-                backgroundColor: messageText.trim() && !isSending 
+                backgroundColor: (messageText.trim() || selectedMedia) && !isSending 
                   ? theme.colors.primary 
                   : theme.colors.disabled 
               }
             ]}
             onPress={handleSendMessage}
-            disabled={!messageText.trim() || isSending}
+            disabled={(!messageText.trim() && !selectedMedia) || isSending}
           >
             {isSending ? (
               <ActivityIndicator size="small" color="white" />
@@ -374,6 +434,15 @@ export const EnhancedChatScreen: React.FC<EnhancedChatScreenProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Emoji GIF Picker Modal */}
+      <EmojiGifPicker
+        visible={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        onEmojiSelect={handleEmojiSelect}
+        onGifSelect={handleGifSelect}
+        onStickerSelect={handleStickerSelect}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -506,5 +575,36 @@ const styles = StyleSheet.create({
   errorText: {
     textAlign: 'center',
     margin: 16,
+  },
+  emojiButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  mediaPreviewContainer: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  mediaPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    backgroundColor: '#f0f2f5',
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  mediaPreviewText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+  },
+  clearMediaButton: {
+    padding: getResponsiveSpacing('xs'),
   },
 }); 

@@ -1,20 +1,30 @@
+import { MaterialIcons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../../lib/AuthContext';
+import { usePlatform } from '../../hooks/usePlatform';
 import { useRealtimeChat } from '../../hooks/useRealtimeChat';
+import { useViewport } from '../../hooks/useViewport';
 import { MessageType } from '../../types';
+import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
+import { EmojiGifPicker } from './EmojiGifPicker';
+import { SafeImage } from './SafeImage';
 
 interface EnhancedRealtimeChatProps {
   conversationId: string;
@@ -26,9 +36,37 @@ interface MessageBubbleProps {
   message: any;
   isOwn: boolean;
   showTimestamp?: boolean;
+  onImagePress?: (uri: string, type: string) => void;
+  onLongPress?: (message: any) => void;
+  showOptions?: boolean;
+  onOptionsClose?: () => void;
+  onCopyMessage?: (message: any) => void;
+  onDeleteMessage?: (message: any) => void;
+  onReplyToMessage?: (message: any) => void;
+  handleEditMessage?: (message: any) => void;
+  handleReportMessage?: (message: any) => void;
+  repliedMessage?: any;
+  messages?: any[];
+  otherUserName?: string;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimestamp = true }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({ 
+  message, 
+  isOwn, 
+  showTimestamp = true, 
+  onImagePress,
+  onLongPress,
+  showOptions = false,
+  onOptionsClose,
+  onCopyMessage,
+  onDeleteMessage,
+  onReplyToMessage,
+  handleEditMessage,
+  handleReportMessage,
+  repliedMessage,
+  messages = [],
+  otherUserName = 'User'
+}) => {
   const theme = useTheme();
   
   const formatTimestamp = (timestamp: string | Date) => {
@@ -44,6 +82,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimes
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
   };
+
+  const isGifMessage = message.message_type === MessageType.GIF;
+  const isStickerMessage = message.message_type === MessageType.STICKER;
+  const isPhotoMessage = message.message_type === MessageType.PHOTO;
+  const isVoiceMessage = message.message_type === MessageType.VOICE;
+  
+  // Find the replied message
+  const findRepliedMessage = (replyToId: string) => {
+    return messages.find((msg: any) => msg.id === replyToId);
+  };
+
+  const repliedToMessage = message.metadata?.replyTo ? findRepliedMessage(message.metadata.replyTo) : null;
   
   return (
     <View style={[
@@ -51,26 +101,215 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimes
       isOwn ? styles.ownMessageContainer : styles.otherMessageContainer
     ]}>
       <View style={[
-        styles.messageBubble,
-        isOwn ? [styles.ownMessageBubble, { backgroundColor: theme.colors.primary }] : 
-               [styles.otherMessageBubble, { backgroundColor: theme.colors.surface }]
+        styles.messageContent,
+        isOwn ? styles.ownMessageContent : styles.otherMessageContent
       ]}>
+        {/* Reply Preview */}
+        {repliedToMessage && (
+          <View style={[
+            styles.replyPreview,
+            { backgroundColor: isOwn ? theme.colors.surface : theme.colors.background }
+          ]}>
+            <View style={styles.replyPreviewContent}>
+              <View style={styles.replyPreviewInfo}>
+                <MaterialIcons 
+                  name="reply" 
+                  size={12} 
+                  color={isOwn ? theme.colors.onPrimary : theme.colors.primary} 
+                />
         <Text style={[
-          styles.messageText,
-          isOwn ? styles.ownMessageText : styles.otherMessageText
-        ]}>
+                  styles.replyPreviewSender,
+                  { color: isOwn ? theme.colors.onPrimary : theme.colors.primary }
+                ]}>
+                  {repliedToMessage.sender_id === message.sender_id ? 'You' : otherUserName}
+                </Text>
+              </View>
+              <Text style={[
+                styles.replyPreviewText,
+                { color: isOwn ? theme.colors.onPrimary : theme.colors.textSecondary }
+              ]} numberOfLines={1}>
+                {repliedToMessage.content}
+              </Text>
+            </View>
+            <View style={[
+              styles.replyPreviewLine,
+              { backgroundColor: isOwn ? theme.colors.onPrimary : theme.colors.primary }
+            ]} />
+          </View>
+        )}
+        {isOwn ? (
+          // Owner message: Options button first, then message
+          <>
+            <TouchableOpacity
+              style={styles.messageOptionsButton}
+              onPress={() => onLongPress?.(message)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="more-vert" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Inline Options Menu for Owner */}
+            {showOptions && isOwn && (
+              <View style={[styles.inlineOptionsMenu, styles.ownerInlineOptionsMenu, { backgroundColor: theme.colors.surface }]}>
+                <TouchableOpacity
+                  style={styles.inlineOptionItem}
+                  onPress={() => handleEditMessage?.(message)}
+                >
+                  <MaterialIcons name="edit" size={16} color={theme.colors.primary} />
+                  <Text style={[styles.inlineOptionText, { color: theme.colors.text }]}>
+                    Edit
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.inlineOptionItem}
+                  onPress={() => onDeleteMessage?.(message)}
+                >
+                  <MaterialIcons name="delete" size={16} color={theme.colors.error} />
+                  <Text style={[styles.inlineOptionText, { color: theme.colors.error }]}>
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.messageBubble,
+                (isGifMessage || isStickerMessage || isPhotoMessage) ? 
+                  { backgroundColor: 'transparent', padding: 0 } : // No background for media messages
+                  [styles.ownMessageBubble, { backgroundColor: theme.colors.primary }]
+              ]}
+              onLongPress={() => onLongPress?.(message)}
+              activeOpacity={0.8}
+            >
+              {isGifMessage ? (
+                <View style={styles.mediaMessageContainer}>
+                  <TouchableOpacity onPress={() => onImagePress?.(message.content, 'gif')}>
+                    <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                  </TouchableOpacity>
+                  <Text style={[styles.mediaMessageText, { color: theme.colors.onPrimary }]}>
+                    🎬 GIF
+                  </Text>
+                </View>
+              ) : isStickerMessage ? (
+                <View style={styles.mediaMessageContainer}>
+                  <TouchableOpacity onPress={() => onImagePress?.(message.content, 'sticker')}>
+                    <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                  </TouchableOpacity>
+                  <Text style={[styles.mediaMessageText, { color: theme.colors.onPrimary }]}>
+                    🎯 Sticker
+                  </Text>
+                </View>
+              ) : isPhotoMessage ? (
+                <View style={styles.mediaMessageContainer}>
+                  <TouchableOpacity onPress={() => onImagePress?.(message.metadata?.imageUrl || message.content, 'photo')}>
+                    <SafeImage source={{ uri: message.metadata?.imageUrl || message.content }} style={styles.mediaMessageImage} />
+                  </TouchableOpacity>
+                  <Text style={[styles.mediaMessageText, { color: theme.colors.onPrimary }]}>
+                    📷 Photo
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.messageText, styles.ownMessageText]}>
           {message.content}
         </Text>
-        {message.is_read && isOwn && (
+              )}
+              {message.is_read && (
           <Text style={[styles.readIndicator, { color: theme.colors.onPrimary }]}>
             ✓
           </Text>
         )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          // Other message: Message first, then options button
+          <>
+            <TouchableOpacity
+              style={[
+                styles.messageBubble,
+                (isGifMessage || isStickerMessage || isPhotoMessage) ? 
+                  { backgroundColor: 'transparent', padding: 0 } : // No background for media messages
+                  [styles.otherMessageBubble, { backgroundColor: theme.colors.surface }]
+              ]}
+              onLongPress={() => onLongPress?.(message)}
+              activeOpacity={0.8}
+            >
+              {isGifMessage ? (
+                <View style={styles.mediaMessageContainer}>
+                  <TouchableOpacity onPress={() => onImagePress?.(message.content, 'gif')}>
+                    <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                  </TouchableOpacity>
+                  <Text style={[styles.mediaMessageText, { color: theme.colors.text }]}>
+                    🎬 GIF
+                  </Text>
       </View>
+              ) : isStickerMessage ? (
+                <View style={styles.mediaMessageContainer}>
+                  <TouchableOpacity onPress={() => onImagePress?.(message.content, 'sticker')}>
+                    <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                  </TouchableOpacity>
+                  <Text style={[styles.mediaMessageText, { color: theme.colors.text }]}>
+                    🎯 Sticker
+                  </Text>
+                </View>
+              ) : isPhotoMessage ? (
+                <View style={styles.mediaMessageContainer}>
+                  <TouchableOpacity onPress={() => onImagePress?.(message.metadata?.imageUrl || message.content, 'photo')}>
+                    <SafeImage source={{ uri: message.metadata?.imageUrl || message.content }} style={styles.mediaMessageImage} />
+                  </TouchableOpacity>
+                  <Text style={[styles.mediaMessageText, { color: theme.colors.text }]}>
+                    📷 Photo
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.messageText, styles.otherMessageText]}>
+                  {message.content}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.messageOptionsButton}
+              onPress={() => onLongPress?.(message)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialIcons name="more-vert" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Inline Options Menu for Others */}
+            {showOptions && !isOwn && (
+              <View style={[styles.inlineOptionsMenu, { backgroundColor: theme.colors.surface }]}>
+                <TouchableOpacity
+                  style={styles.inlineOptionItem}
+                  onPress={() => onReplyToMessage?.(message)}
+                >
+                  <MaterialIcons name="reply" size={16} color={theme.colors.primary} />
+                  <Text style={[styles.inlineOptionText, { color: theme.colors.text }]}>
+                    Reply
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.inlineOptionItem}
+                  onPress={() => handleReportMessage?.(message)}
+                >
+                  <MaterialIcons name="report" size={16} color={theme.colors.error} />
+                  <Text style={[styles.inlineOptionText, { color: theme.colors.error }]}>
+                    Report
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+      </View>
+
       {showTimestamp && (
         <Text style={[
           styles.timestamp,
-          { color: theme.colors.textSecondary }
+          { color: theme.colors.textSecondary },
+          isOwn ? styles.ownTimestamp : styles.otherTimestamp
         ]}>
           {formatTimestamp(message.created_at)}
         </Text>
@@ -174,21 +413,174 @@ const MessageStats: React.FC<{
   );
 };
 
+const ImageViewer: React.FC<{
+  image: { uri: string; type: string } | null;
+  onClose: () => void;
+}> = ({ image, onClose }) => {
+  const theme = useTheme();
+  
+  if (!image) return null;
+  
+  return (
+    <View style={styles.imageViewerOverlay}>
+      <View style={styles.imageViewerContainer}>
+        <View style={styles.imageViewerHeader}>
+          <Text style={[styles.imageViewerTitle, { color: theme.colors.text }]}>
+            {image.type === 'gif' ? '🎬 GIF' : image.type === 'sticker' ? '🎯 Sticker' : '📷 Photo'}
+          </Text>
+          <TouchableOpacity onPress={onClose} style={styles.imageViewerCloseButton}>
+            <MaterialIcons name="close" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.imageViewerContent}>
+          <SafeImage 
+            source={{ uri: image.uri }} 
+            style={styles.imageViewerImage}
+            resizeMode="contain"
+            fallbackSize={64}
+            showFallbackText={true}
+            fallbackText="Image not available"
+          />
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   conversationId,
   otherUserName = 'User',
   onBack
 }) => {
   const theme = useTheme();
+  const { isWeb, isDesktopBrowser } = usePlatform();
+  const { isBreakpoint } = useViewport();
+  const isDesktop = isBreakpoint.xl || isDesktopBrowser;
+  
   const { user } = useAuth();
   const [messageText, setMessageText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<Array<{ type: 'gif' | 'sticker' | 'image', url: string, id: string }>>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ uri: string; type: string } | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const textInputRef = useRef<TextInput>(null);
+  const [selectedMessage, setSelectedMessage] = useState<any>(null);
+  const [showMessageOptions, setShowMessageOptions] = useState(false);
+  const [repliedMessage, setRepliedMessage] = useState<any>(null);
+
+  // Message options handlers
+  const handleMessageLongPress = (message: any) => {
+    if (selectedMessage?.id === message.id && showMessageOptions) {
+      // If clicking the same message and options are already shown, hide them
+      setShowMessageOptions(false);
+      setSelectedMessage(null);
+    } else {
+      // Show options for the clicked message
+      setSelectedMessage(message);
+      setShowMessageOptions(true);
+    }
+  };
+
+  const handleMessageOptionsClose = () => {
+    setShowMessageOptions(false);
+    setSelectedMessage(null);
+  };
+
+  const handleCopyMessage = (message: any) => {
+    // Copy message content to clipboard
+    if (message.content) {
+      // For web, we can use navigator.clipboard
+      if (isWeb && navigator.clipboard) {
+        navigator.clipboard.writeText(message.content);
+      } else {
+        // For mobile, we'll need to implement clipboard functionality
+        Alert.alert('Copied!', 'Message copied to clipboard');
+      }
+    }
+    handleMessageOptionsClose();
+  };
+
+  const handleDeleteMessage = (message: any) => {
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // TODO: Implement message deletion
+              console.log('Deleting message:', message.id);
+              handleMessageOptionsClose();
+            } catch (error) {
+              console.error('Error deleting message:', error);
+              Alert.alert('Error', 'Failed to delete message');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleReplyToMessage = (message: any) => {
+    setRepliedMessage(message);
+    handleMessageOptionsClose();
+    // Focus the text input
+    setTimeout(() => {
+      textInputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleCancelReply = () => {
+    setRepliedMessage(null);
+  };
+
+  const handleEditMessage = (message: any) => {
+    // TODO: Implement edit functionality
+    console.log('Edit message:', message.id);
+    handleMessageOptionsClose();
+  };
+
+  const handleReportMessage = (message: any) => {
+    Alert.alert(
+      'Report Message',
+      'Are you sure you want to report this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Report', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // TODO: Implement message reporting
+              console.log('Reporting message:', message.id);
+              Alert.alert('Reported', 'Message has been reported');
+              handleMessageOptionsClose();
+            } catch (error) {
+              console.error('Error reporting message:', error);
+              Alert.alert('Error', 'Failed to report message');
+            }
+          }
+        }
+      ]
+    );
+  };
   
   const {
     messages,
     sendMessage,
+    sendImageMessage,
     isLoading,
     error,
     typingUsers,
@@ -240,17 +632,125 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   };
 
   const handleSendMessage = async () => {
-    if (!messageText.trim()) return;
+    if (!messageText.trim() && selectedMedia.length === 0) return;
     
     const textToSend = messageText.trim();
     setMessageText('');
+    setSelectedMedia([]);
     setIsTyping(false);
     
+    // Clear reply after sending
+    const currentRepliedMessage = repliedMessage;
+    setRepliedMessage(null);
+    
     try {
-      await sendMessage(textToSend, MessageType.TEXT);
+      if (selectedMedia.length > 0) {
+        // Send multiple media messages
+        for (const media of selectedMedia) {
+          let messageType: MessageType;
+          switch (media.type) {
+            case 'gif':
+              messageType = MessageType.GIF;
+              break;
+            case 'sticker':
+              messageType = MessageType.STICKER;
+              break;
+            case 'image':
+              messageType = MessageType.PHOTO;
+              break;
+            default:
+              messageType = MessageType.TEXT;
+          }
+          await sendMessage(media.url, messageType, { replyTo: currentRepliedMessage?.id });
+        }
+      } else {
+        // Send text message with reply data
+        await sendMessage(textToSend, MessageType.TEXT, { replyTo: currentRepliedMessage?.id });
+      }
     } catch (err) {
       Alert.alert('Error', 'Failed to send message');
     }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    setMessageText(prev => prev + emoji);
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    const newMedia = { type: 'gif' as const, url: gifUrl, id: Date.now().toString() };
+    setSelectedMedia(prev => [...prev, newMedia]);
+    setShowEmojiPicker(false);
+  };
+
+  const handleStickerSelect = (stickerUrl: string) => {
+    const newMedia = { type: 'sticker' as const, url: stickerUrl, id: Date.now().toString() };
+    setSelectedMedia(prev => [...prev, newMedia]);
+    setShowEmojiPicker(false);
+  };
+
+  const handleImagePress = (uri: string, type: string) => {
+    setSelectedImage({ uri, type });
+  };
+
+  const clearSelectedMedia = () => {
+    setSelectedMedia([]);
+  };
+
+  const removeSelectedMedia = (id: string) => {
+    setSelectedMedia(prev => prev.filter(media => media.id !== id));
+  };
+
+  const renderMediaPreview = () => {
+    if (selectedMedia.length === 0) return null;
+
+    return (
+      <View style={styles.mediaPreviewContainer}>
+        <View style={styles.mediaPreviewHeader}>
+          <Text style={[styles.mediaPreviewTitle, { color: theme.colors.text }]}>
+            {selectedMedia.length} attachment{selectedMedia.length > 1 ? 's' : ''} selected
+          </Text>
+          <TouchableOpacity onPress={clearSelectedMedia} style={styles.clearAllMediaButton}>
+            <MaterialIcons name="close" size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.mediaPreviewScroll}
+          contentContainerStyle={styles.mediaPreviewScrollContent}
+        >
+          {selectedMedia.map((media, index) => (
+            <View key={media.id} style={styles.mediaPreviewItem}>
+              {media.type === 'image' ? (
+                <SafeImage
+                  source={{ uri: media.url }}
+                  style={styles.mediaPreviewImage}
+                  fallbackSize={32}
+                  showFallbackText={false}
+                />
+              ) : (
+                <View style={styles.mediaPreviewIcon}>
+                  <MaterialIcons 
+                    name={media.type === 'gif' ? 'gif' : 'sticky-note-2'} 
+                    size={24} 
+                    color={theme.colors.primary} 
+                  />
+                </View>
+              )}
+              <TouchableOpacity 
+                onPress={() => removeSelectedMedia(media.id)} 
+                style={styles.removeMediaButton}
+              >
+                <MaterialIcons name="close" size={16} color={theme.colors.error} />
+              </TouchableOpacity>
+              <Text style={[styles.mediaPreviewItemText, { color: theme.colors.textSecondary }]}>
+                {media.type === 'gif' ? 'GIF' : media.type === 'sticker' ? 'Sticker' : 'Photo'}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
   };
 
   const handleReconnect = async () => {
@@ -275,14 +775,32 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     const isOwn = (item.sender_id || item.senderId) === user?.id;
-    const showTimestamp = index === 0 || 
-      new Date(item.created_at).getTime() - new Date(messages[index - 1]?.created_at).getTime() > 300000; // 5 minutes
+    
+    // Calculate if we should show timestamp
+    let showTimestamp = index === 0;
+    if (index > 0 && messages[index - 1]?.created_at) {
+      const currentTime = new Date(item.created_at).getTime();
+      const previousTime = new Date(messages[index - 1].created_at).getTime();
+      showTimestamp = (currentTime - previousTime) > 300000; // 5 minutes
+    }
     
     return (
       <MessageBubble
         message={item}
         isOwn={isOwn}
         showTimestamp={showTimestamp}
+        onImagePress={handleImagePress}
+        onLongPress={handleMessageLongPress}
+        showOptions={showMessageOptions && selectedMessage?.id === item.id}
+        onOptionsClose={handleMessageOptionsClose}
+        onCopyMessage={handleCopyMessage}
+        onDeleteMessage={handleDeleteMessage}
+        onReplyToMessage={handleReplyToMessage}
+        handleEditMessage={handleEditMessage}
+        handleReportMessage={handleReportMessage}
+        repliedMessage={repliedMessage}
+        messages={messages}
+        otherUserName={otherUserName}
       />
     );
   };
@@ -309,6 +827,230 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
 
   const isOtherUserOnline = onlineUsers.length > 0;
 
+  // Enhanced keyboard handling for desktop
+  const handleKeyPress = (e: any) => {
+    if (isDesktop && e.nativeEvent?.key === 'Enter' && !e.nativeEvent?.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // Image picker functionality
+  const handleImagePicker = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false, // Allow any aspect ratio
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        console.log('Image selected:', asset.uri);
+        
+        // Show loading indicator
+        Alert.alert('Uploading...', 'Please wait while we upload your image.');
+        
+        // Convert to ImageUploadData format for UUID-based sending
+        const imageData = {
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          type: 'image/jpeg',
+          base64: asset.base64 || undefined,
+        };
+
+        // Send image message with UUID-based filename
+        await sendImageMessage(imageData, '', { replyTo: repliedMessage?.id });
+        
+        setShowAttachmentMenu(false);
+        Alert.alert('Success', 'Image sent successfully!');
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to send image. Please try again.');
+    }
+  };
+
+  // Voice recording functionality
+  const startRecording = async () => {
+    try {
+      const permissionResult = await Audio.requestPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Permission to access microphone is required!');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Start timer for recording duration
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000) as any;
+
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      Alert.alert('Error', 'Failed to start recording. Please try again.');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    try {
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+      setRecordingDuration(0);
+
+      if (uri) {
+        // Send voice message
+        await sendMessage(uri, MessageType.VOICE);
+      }
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      Alert.alert('Error', 'Failed to stop recording. Please try again.');
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const renderAttachmentMenu = () => {
+    if (!showAttachmentMenu) return null;
+
+    return (
+      <View style={[
+        styles.attachmentMenu,
+        { backgroundColor: theme.colors.surface }
+      ]}>
+        <TouchableOpacity
+          style={styles.attachmentOption}
+          onPress={() => {
+            setShowEmojiPicker(true);
+            setShowAttachmentMenu(false);
+          }}
+        >
+          <View style={[styles.attachmentIcon, { backgroundColor: theme.colors.primary + '20' }]}>
+            <MaterialIcons name="emoji-emotions" size={24} color={theme.colors.primary} />
+          </View>
+          <Text style={[styles.attachmentText, { color: theme.colors.text }]}>
+            Emoji & GIF
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.attachmentOption}
+          onPress={handleImagePicker}
+        >
+          <View style={[styles.attachmentIcon, { backgroundColor: theme.colors.success + '20' }]}>
+            <MaterialIcons name="image" size={24} color={theme.colors.success} />
+          </View>
+          <Text style={[styles.attachmentText, { color: theme.colors.text }]}>
+            Photo
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.attachmentOption}
+          onPressIn={startRecording}
+          onPressOut={stopRecording}
+        >
+          <View style={[styles.attachmentIcon, { backgroundColor: theme.colors.warning + '20' }]}>
+            <MaterialIcons 
+              name={isRecording ? "stop" : "mic"} 
+              size={24} 
+              color={theme.colors.warning} 
+            />
+          </View>
+          <Text style={[styles.attachmentText, { color: theme.colors.text }]}>
+            {isRecording ? 'Recording...' : 'Voice'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderMoreOptionsMenu = () => {
+    if (!showMoreOptions) return null;
+
+    return (
+      <View style={[
+        styles.moreOptionsMenu,
+        { backgroundColor: theme.colors.surface }
+      ]}>
+        <TouchableOpacity
+          style={styles.moreOption}
+          onPress={() => {
+            setShowSearch(!showSearch);
+            setShowMoreOptions(false);
+          }}
+        >
+          <MaterialIcons name="search" size={20} color={theme.colors.primary} />
+          <Text style={[styles.moreOptionText, { color: theme.colors.text }]}>
+            Search Messages
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.moreOption}
+          onPress={() => {
+            refreshMessages();
+            setShowMoreOptions(false);
+          }}
+        >
+          <MaterialIcons name="refresh" size={20} color={theme.colors.primary} />
+          <Text style={[styles.moreOptionText, { color: theme.colors.text }]}>
+            Refresh Messages
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.moreOption}
+          onPress={() => {
+            // TODO: Implement clear chat functionality
+            setShowMoreOptions(false);
+          }}
+        >
+          <MaterialIcons name="clear-all" size={20} color={theme.colors.error} />
+          <Text style={[styles.moreOptionText, { color: theme.colors.error }]}>
+            Clear Chat
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+
+
   if (error) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -330,23 +1072,41 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   }
 
   return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Main Chat Area */}
+      <View style={styles.chatArea}>
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+          style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+      <View style={[
+        styles.header, 
+        { 
+          backgroundColor: theme.colors.surface,
+          paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+          paddingVertical: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+        }
+      ]}>
         {onBack && (
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={[styles.backButtonText, { color: theme.colors.primary }]}>
-              ← Back
-            </Text>
+            <MaterialIcons 
+              name="arrow-back" 
+              size={isDesktop ? 28 : 24} 
+              color={theme.colors.primary} 
+            />
           </TouchableOpacity>
         )}
         
         <View style={styles.headerInfo}>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+          <Text style={[
+            styles.headerTitle, 
+            { 
+              color: theme.colors.text,
+              fontSize: isDesktop ? getResponsiveFontSize('xl') : getResponsiveFontSize('lg'),
+            }
+          ]}>
             {otherUserName}
           </Text>
           <OnlineStatusIndicator
@@ -357,32 +1117,41 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
         
         <View style={styles.headerActions}>
           <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => setShowSearch(!showSearch)}
+            style={[styles.headerButton, isDesktop && styles.desktopHeaderButton]}
+            onPress={() => {
+              // TODO: Implement voice call functionality
+              Alert.alert('Call', 'Voice call feature coming soon!');
+            }}
           >
-            <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>
-              🔍
-            </Text>
+            <MaterialIcons 
+              name="call" 
+              size={isDesktop ? 24 : 20} 
+              color={theme.colors.primary} 
+            />
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={styles.headerButton}
-            onPress={refreshMessages}
+            style={[styles.headerButton, isDesktop && styles.desktopHeaderButton]}
+            onPress={() => setShowInfoPanel(!showInfoPanel)}
           >
-            <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>
-              ↻
-            </Text>
+            <MaterialIcons 
+              name={showInfoPanel ? "info" : "info-outline"} 
+              size={isDesktop ? 24 : 20} 
+              color={theme.colors.primary} 
+            />
           </TouchableOpacity>
+        
           
-          <View style={styles.connectionStatus}>
-            <View style={[
-              styles.connectionDot,
-              { backgroundColor: isConnected ? theme.colors.success : theme.colors.error }
-            ]} />
-            <Text style={[styles.connectionText, { color: theme.colors.textSecondary }]}>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.headerButton, isDesktop && styles.desktopHeaderButton]}
+            onPress={() => setShowMoreOptions(!showMoreOptions)}
+          >
+            <MaterialIcons 
+              name="more-vert" 
+              size={isDesktop ? 24 : 20} 
+              color={theme.colors.primary} 
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -395,8 +1164,8 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
         />
       )}
 
-      {/* Message Stats */}
-      <MessageStats messageCount={messageCount} unreadCount={unreadCount} />
+      {/* More Options Menu */}
+      {renderMoreOptionsMenu()}
 
       {/* Messages */}
       {isLoading ? (
@@ -419,10 +1188,16 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           style={styles.messagesList}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={[
+            styles.messagesContent,
+            {
+              paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+              paddingVertical: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+            }
+          ]}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={isDesktop}
           ListHeaderComponent={renderLoadMoreButton}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.1}
@@ -432,19 +1207,142 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
       {/* Typing Indicator */}
       <TypingIndicator isVisible={typingUsers.length > 0} />
 
+      {/* Recording Indicator */}
+      {isRecording && (
+        <View style={[styles.recordingIndicator, { backgroundColor: theme.colors.error }]}>
+          <MaterialIcons name="mic" size={20} color="white" />
+          <Text style={styles.recordingText}>
+            Recording... {formatDuration(recordingDuration)}
+          </Text>
+        </View>
+      )}
+      {/* Reply Preview */}
+      {repliedMessage && (
+        <View style={[
+          styles.replyPreviewContainer,
+          { backgroundColor: theme.colors.surface }
+        ]}>
+          <View style={styles.replyPreviewHeader}>
+            <View style={styles.replyPreviewHeaderLeft}>
+              <MaterialIcons 
+                name="reply" 
+                size={16} 
+                color={theme.colors.primary} 
+              />
+              <Text style={[
+                styles.replyPreviewHeaderText,
+                { color: theme.colors.primary }
+              ]}>
+                Replying to {repliedMessage.sender_id === user?.id ? 'yourself' : otherUserName}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.replyPreviewCloseButton}
+              onPress={handleCancelReply}
+            >
+              <MaterialIcons 
+                name="close" 
+                size={16} 
+                color={theme.colors.textSecondary} 
+              />
+            </TouchableOpacity>
+          </View>
+          <View style={[
+            styles.replyPreviewMessage,
+            { backgroundColor: theme.colors.background }
+          ]}>
+            <Text style={[
+              styles.replyPreviewMessageText,
+              { color: theme.colors.textSecondary }
+            ]} numberOfLines={2}>
+              {repliedMessage.content}
+            </Text>
+          </View>
+        </View>
+      )}
+      {/* Media Preview */}
+      {renderMediaPreview()}
+
       {/* Input */}
-      <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface }]}>
+      <View style={[
+        styles.inputContainer, 
+        { 
+          backgroundColor: theme.colors.surface,
+          paddingHorizontal: isDesktop ? getResponsiveSpacing('xl') : getResponsiveSpacing('md'),
+          paddingVertical: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+        }
+      ]}>
+        {/* Input Row with Inline Attachments */}
+        <View style={styles.inputRow}>
+          {/* Emoji Button */}
+          <TouchableOpacity
+            style={[
+              styles.attachmentButton,
+              isDesktop && styles.desktopAttachmentButton
+            ]}
+            onPress={() => {
+              setShowEmojiPicker(true);
+            }}
+          >
+            <MaterialIcons 
+              name="emoji-emotions" 
+              size={isDesktop ? 28 : 24} 
+              color={theme.colors.primary} 
+            />
+          </TouchableOpacity>
+
+          {/* Photo Button */}
+          <TouchableOpacity
+            style={[
+              styles.attachmentButton,
+              isDesktop && styles.desktopAttachmentButton
+            ]}
+            onPress={handleImagePicker}
+          >
+            <MaterialIcons 
+              name="image" 
+              size={isDesktop ? 28 : 24} 
+              color={theme.colors.primary} 
+            />
+          </TouchableOpacity>
+
+          {/* Voice Recording Button */}
+          <TouchableOpacity
+            style={[
+              styles.attachmentButton,
+              isDesktop && styles.desktopAttachmentButton
+            ]}
+            onPressIn={startRecording}
+            onPressOut={stopRecording}
+          >
+            <MaterialIcons 
+              name={isRecording ? "stop" : "mic"} 
+              size={isDesktop ? 28 : 24} 
+              color={isRecording ? theme.colors.error : theme.colors.primary} 
+            />
+          </TouchableOpacity>
         <TextInput
+          ref={textInputRef}
           style={[
             styles.textInput,
             {
               backgroundColor: theme.colors.background,
               color: theme.colors.text,
-              borderColor: theme.colors.border
+                borderColor: theme.colors.border,
+                fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
+                paddingHorizontal: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+                paddingVertical: isDesktop ? getResponsiveSpacing('md') : getResponsiveSpacing('sm'),
+                borderRadius: isDesktop ? getResponsiveSpacing('lg') : getResponsiveSpacing('md'),
+                maxHeight: isDesktop ? 120 : 100,
+                flex: 1,
+                minWidth: 0, // Allow text input to shrink below its content size
+                flexShrink: 1, // Allow the input to shrink
+                marginLeft: getResponsiveSpacing('sm'), // Add space after attachment buttons
             }
           ]}
           value={messageText}
           onChangeText={handleTextChange}
+            onKeyPress={handleKeyPress}
           placeholder="Type a message..."
           placeholderTextColor={theme.colors.textSecondary}
           multiline
@@ -453,49 +1351,336 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
           blurOnSubmit={false}
           returnKeyType="send"
         />
+          
         <TouchableOpacity
           style={[
-            styles.sendButton,
+              styles.sendIconButton,
             {
-              backgroundColor: messageText.trim() ? theme.colors.primary : theme.colors.disabled
+                backgroundColor: (messageText.trim() || selectedMedia.length > 0) ? theme.colors.primary : theme.colors.disabled,
+                opacity: (messageText.trim() || selectedMedia.length > 0) ? 1 : 0.5,
             }
           ]}
           onPress={handleSendMessage}
-          disabled={!messageText.trim()}
-        >
-          <Text style={[styles.sendButtonText, { color: theme.colors.onPrimary }]}>
-            Send
-          </Text>
+            disabled={!messageText.trim() && selectedMedia.length === 0}
+          >
+            <MaterialIcons 
+              name="send" 
+              size={isDesktop ? 24 : 20} 
+              color={theme.colors.onPrimary} 
+            />
         </TouchableOpacity>
       </View>
+      </View>
+
+      {/* Emoji GIF Picker Modal */}
+      <EmojiGifPicker
+        visible={showEmojiPicker}
+        onClose={() => setShowEmojiPicker(false)}
+        onEmojiSelect={handleEmojiSelect}
+        onGifSelect={handleGifSelect}
+        onStickerSelect={handleStickerSelect}
+      />
     </KeyboardAvoidingView>
+      </View>
+
+      {/* Right Sidebar - Chat Info (Desktop) */}
+      {isDesktop && showInfoPanel && (
+        <View style={[styles.rightSidebar, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.sidebarHeader}>
+            <Text style={[styles.sidebarTitle, { color: theme.colors.text }]}>
+              Chat Info
+            </Text>
+          </View>
+
+          <ScrollView style={styles.sidebarContent} showsVerticalScrollIndicator={false}>
+            {/* User Info Section */}
+            <View style={styles.sidebarSection}>
+              <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                User Information
+              </Text>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="person" size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Name:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                  {otherUserName}
+                </Text>
+              </View>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="circle" size={16} color={isOtherUserOnline ? theme.colors.success : theme.colors.textSecondary} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Status:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                  {isOtherUserOnline ? 'Online' : 'Offline'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Chat Stats Section */}
+            <View style={styles.sidebarSection}>
+              <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                Chat Statistics
+              </Text>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="message" size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Total Messages:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                  {messageCount}
+                </Text>
+              </View>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="mark-email-unread" size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Unread Messages:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                  {unreadCount}
+                </Text>
+              </View>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="schedule" size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Conversation ID:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                  {conversationId.slice(0, 8)}...
+                </Text>
+              </View>
+            </View>
+
+            {/* Connection Status Section */}
+            <View style={styles.sidebarSection}>
+              <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                Connection Status
+              </Text>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="wifi" size={16} color={isConnected ? theme.colors.success : theme.colors.error} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Connection:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: isConnected ? theme.colors.success : theme.colors.error }]}>
+                  {isConnected ? 'Connected' : 'Disconnected'}
+                </Text>
+              </View>
+              <View style={styles.sidebarRow}>
+                <MaterialIcons name="people" size={16} color={theme.colors.textSecondary} />
+                <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                  Online Users:
+                </Text>
+                <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                  {onlineUsers.length}
+                </Text>
+              </View>
+            </View>
+
+            {/* Actions Section */}
+            <View style={styles.sidebarSection}>
+              <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                Actions
+              </Text>
+              <TouchableOpacity
+                style={[styles.sidebarActionButton, { backgroundColor: theme.colors.primary }]}
+                onPress={() => {
+                  setShowSearch(true);
+                  setShowInfoPanel(false);
+                }}
+              >
+                <MaterialIcons name="search" size={16} color="#fff" />
+                <Text style={[styles.sidebarActionText, { color: '#fff' }]}>
+                  Search Messages
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.sidebarActionButton, { backgroundColor: theme.colors.success }]}
+                onPress={() => {
+                  refreshMessages();
+                  setShowInfoPanel(false);
+                }}
+              >
+                <MaterialIcons name="refresh" size={16} color="#fff" />
+                <Text style={[styles.sidebarActionText, { color: '#fff' }]}>
+                  Refresh Chat
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Mobile Chat Info Modal */}
+      {!isDesktop && showInfoPanel && (
+        <View style={styles.mobileInfoOverlay}>
+          <View style={[styles.mobileInfoModal, { backgroundColor: theme.colors.surface }]}>
+            <View style={styles.mobileInfoHeader}>
+              <Text style={[styles.mobileInfoTitle, { color: theme.colors.text }]}>
+                Chat Info
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowInfoPanel(false)}
+                style={styles.mobileInfoCloseButton}
+              >
+                <MaterialIcons name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.mobileInfoContent} showsVerticalScrollIndicator={false}>
+              {/* User Info Section */}
+              <View style={styles.sidebarSection}>
+                <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                  User Information
+                </Text>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="person" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Name:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                    {otherUserName}
+                  </Text>
+                </View>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="circle" size={16} color={isOtherUserOnline ? theme.colors.success : theme.colors.textSecondary} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Status:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                    {isOtherUserOnline ? 'Online' : 'Offline'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Chat Stats Section */}
+              <View style={styles.sidebarSection}>
+                <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                  Chat Statistics
+                </Text>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="message" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Total Messages:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                    {messageCount}
+                  </Text>
+                </View>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="mark-email-unread" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Unread Messages:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                    {unreadCount}
+                  </Text>
+                </View>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="schedule" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Conversation ID:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                    {conversationId.slice(0, 8)}...
+                  </Text>
+                </View>
+              </View>
+
+              {/* Connection Status Section */}
+              <View style={styles.sidebarSection}>
+                <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                  Connection Status
+                </Text>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="wifi" size={16} color={isConnected ? theme.colors.success : theme.colors.error} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Connection:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: isConnected ? theme.colors.success : theme.colors.error }]}>
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </Text>
+                </View>
+                <View style={styles.sidebarRow}>
+                  <MaterialIcons name="people" size={16} color={theme.colors.textSecondary} />
+                  <Text style={[styles.sidebarLabel, { color: theme.colors.textSecondary }]}>
+                    Online Users:
+                  </Text>
+                  <Text style={[styles.sidebarValue, { color: theme.colors.text }]}>
+                    {onlineUsers.length}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Actions Section */}
+              <View style={styles.sidebarSection}>
+                <Text style={[styles.sidebarSectionTitle, { color: theme.colors.text }]}>
+                  Actions
+                </Text>
+                <TouchableOpacity
+                  style={[styles.sidebarActionButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => {
+                    setShowSearch(true);
+                    setShowInfoPanel(false);
+                  }}
+                >
+                  <MaterialIcons name="search" size={16} color="#fff" />
+                  <Text style={[styles.sidebarActionText, { color: '#fff' }]}>
+                    Search Messages
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.sidebarActionButton, { backgroundColor: theme.colors.success }]}
+                  onPress={() => {
+                    refreshMessages();
+                    setShowInfoPanel(false);
+                  }}
+                >
+                  <MaterialIcons name="refresh" size={16} color="#fff" />
+                  <Text style={[styles.sidebarActionText, { color: '#fff' }]}>
+                    Refresh Chat
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* Image Viewer */}
+      <ImageViewer
+        image={selectedImage}
+        onClose={() => setSelectedImage(null)}
+      />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    flexDirection: 'row',
+    maxWidth: 1200, // Limit width on desktop
+    alignSelf: 'center', // Center on desktop
+    width: '100%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    minHeight: 60,
   },
   backButton: {
-    marginRight: 12,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
+    marginRight: getResponsiveSpacing('md'),
+    padding: getResponsiveSpacing('sm'),
   },
   headerInfo: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
     fontWeight: '600',
     marginBottom: 2,
   },
@@ -504,14 +1689,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerButton: {
-    padding: 8,
-    marginLeft: 8,
+    padding: getResponsiveSpacing('sm'),
+    marginLeft: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
   },
-  headerButtonText: {
-    fontSize: 18,
+  desktopHeaderButton: {
+    padding: getResponsiveSpacing('md'),
+    marginLeft: getResponsiveSpacing('md'),
   },
   connectionStatus: {
-    marginLeft: 12,
+    marginLeft: getResponsiveSpacing('md'),
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -521,8 +1708,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   connectionText: {
-    fontSize: 10,
-    marginLeft: 4,
+    marginLeft: getResponsiveSpacing('xs'),
   },
   searchContainer: {
     flexDirection: 'row',
@@ -586,12 +1772,29 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     marginVertical: 4,
+    position: 'relative',
   },
   ownMessageContainer: {
     alignItems: 'flex-end',
   },
   otherMessageContainer: {
     alignItems: 'flex-start',
+  },
+  messageContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 4,
+    flex: 1,
+  },
+  ownMessageContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+  },
+  otherMessageContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
   },
   messageBubble: {
     maxWidth: '80%',
@@ -615,10 +1818,88 @@ const styles = StyleSheet.create({
   otherMessageText: {
     color: '#000000',
   },
+  readIndicator: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
   timestamp: {
     fontSize: 12,
     marginTop: 4,
     marginHorizontal: 8,
+  },
+  ownTimestamp: {
+    textAlign: 'right',
+  },
+  otherTimestamp: {
+    textAlign: 'left',
+  },
+  messageOptionsButton: {
+    padding: getResponsiveSpacing('sm'),
+    marginHorizontal: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  messageOptionsPanel: {
+    position: 'absolute',
+    top: 0,
+    left: '100%',
+    width: Math.min(180, getResponsiveSpacing('xl') * 8),
+    minHeight: 100,
+    maxHeight: 200,
+    marginLeft: getResponsiveSpacing('sm'),
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1000,
+  },
+  ownMessageOptionsPanel: {
+    left: 'auto',
+    right: '100%',
+    marginLeft: 0,
+    marginRight: getResponsiveSpacing('sm'),
+  },
+  otherMessageOptionsPanel: {
+    left: '100%',
+    right: 'auto',
+    marginLeft: getResponsiveSpacing('sm'),
+    marginRight: 0,
+  },
+  messageOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  messageOptionsTitle: {
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: '600',
+  },
+  messageOptionsCloseButton: {
+    padding: getResponsiveSpacing('xs'),
+  },
+  messageOptionsScrollView: {
+    flex: 1,
+  },
+  messageOptionsList: {
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+  },
+  messageOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: getResponsiveSpacing('md'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  messageOptionText: {
+    fontSize: getResponsiveFontSize('md'),
+    marginLeft: getResponsiveSpacing('md'),
+    fontWeight: '500',
   },
   typingContainer: {
     flexDirection: 'row',
@@ -655,12 +1936,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: 'column',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
+    minWidth: 0, // Prevent overflow
   },
   textInput: {
     flex: 1,
@@ -668,9 +1949,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    marginRight: 12,
     maxHeight: 100,
     fontSize: 16,
+    minWidth: 0, // Allow text input to shrink below its content size
   },
   sendButton: {
     paddingHorizontal: 20,
@@ -678,6 +1959,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     minWidth: 60,
     alignItems: 'center',
+  },
+  sendIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: getResponsiveSpacing('sm'),
+    flexShrink: 0, // Prevent send button from shrinking
   },
   sendButtonText: {
     fontSize: 16,
@@ -714,9 +2004,535 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
-  readIndicator: {
-    fontSize: 12,
-    marginTop: 4,
-    alignSelf: 'flex-end',
+  attachmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('xs'),
+    width: '100%',
+    minWidth: 0, // Prevent overflow
+  },
+  emojiButton: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  desktopEmojiButton: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderRadius: getResponsiveSpacing('md'),
+  },
+  mediaPreviewContainer: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#f8f9fa',
+  },
+  mediaPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('md'),
+    backgroundColor: '#fff',
+    borderRadius: getResponsiveSpacing('md'),
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  mediaPreviewContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  mediaPreviewImage: {
+    width: 60,
+    height: 60,
+    borderRadius: getResponsiveSpacing('sm'),
+    marginRight: getResponsiveSpacing('md'),
+  },
+  mediaPreviewIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: getResponsiveSpacing('sm'),
+    backgroundColor: '#f0f2f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: getResponsiveSpacing('md'),
+  },
+  mediaPreviewInfo: {
+    flex: 1,
+  },
+  mediaPreviewText: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  mediaPreviewSubtext: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '400',
+  },
+  clearMediaButton: {
+    padding: getResponsiveSpacing('xs'),
+  },
+  mediaMessageContainer: {
+    alignItems: 'center',
+    padding: getResponsiveSpacing('sm'),
+  },
+  mediaMessageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  mediaMessageText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  attachmentButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  desktopAttachmentButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  attachmentMenu: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: getResponsiveSpacing('lg'),
+    paddingHorizontal: getResponsiveSpacing('md'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    marginBottom: getResponsiveSpacing('md'),
+    backgroundColor: '#f8f9fa',
+  },
+  attachmentOption: {
+    alignItems: 'center',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderRadius: getResponsiveSpacing('md'),
+    minWidth: 80,
+  },
+  attachmentIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: getResponsiveSpacing('sm'),
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  attachmentText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    marginHorizontal: getResponsiveSpacing('md'),
+    marginBottom: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('md'),
+  },
+  recordingText: {
+    color: 'white',
+    marginLeft: getResponsiveSpacing('sm'),
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+  },
+  moreOptionsMenu: {
+    position: 'absolute',
+    top: 70,
+    right: getResponsiveSpacing('md'),
+    backgroundColor: '#fff',
+    borderRadius: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 1000,
+    minWidth: 180,
+  },
+  moreOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+  },
+  moreOptionText: {
+    fontSize: getResponsiveFontSize('sm'),
+    marginLeft: getResponsiveSpacing('md'),
+    fontWeight: '500',
+  },
+
+  chatArea: {
+    flex: 1,
+  },
+  rightSidebar: {
+    width: 320,
+    borderLeftWidth: 1,
+    borderLeftColor: '#e0e0e0',
+    backgroundColor: '#fff',
+  },
+  sidebarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  sidebarTitle: {
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: '600',
+  },
+  closeSidebarButton: {
+    padding: getResponsiveSpacing('xs'),
+  },
+  sidebarContent: {
+    flex: 1,
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+  },
+  sidebarSection: {
+    marginBottom: getResponsiveSpacing('lg'),
+  },
+  sidebarSectionTitle: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  sidebarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  sidebarLabel: {
+    fontSize: getResponsiveFontSize('sm'),
+    marginLeft: getResponsiveSpacing('sm'),
+    marginRight: getResponsiveSpacing('sm'),
+    minWidth: 100,
+  },
+  sidebarValue: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+    flex: 1,
+  },
+  sidebarActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: getResponsiveSpacing('md'),
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    borderRadius: getResponsiveSpacing('md'),
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  sidebarActionText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '500',
+    marginLeft: getResponsiveSpacing('sm'),
+  },
+  // Mobile Info Modal Styles
+  mobileInfoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  mobileInfoModal: {
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: getResponsiveSpacing('lg'),
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  mobileInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  mobileInfoTitle: {
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: '600',
+  },
+  mobileInfoCloseButton: {
+    padding: getResponsiveSpacing('xs'),
+  },
+  mobileInfoContent: {
+    flex: 1,
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+  },
+  // Multiple Media Preview Styles
+  mediaPreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  mediaPreviewTitle: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+  },
+  clearAllMediaButton: {
+    padding: getResponsiveSpacing('xs'),
+  },
+  mediaPreviewScroll: {
+    maxHeight: 120,
+  },
+  mediaPreviewScrollContent: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    gap: getResponsiveSpacing('sm'),
+  },
+  mediaPreviewItem: {
+    alignItems: 'center',
+    position: 'relative',
+    minWidth: 80,
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  mediaPreviewItemText: {
+    fontSize: getResponsiveFontSize('xs'),
+    marginTop: getResponsiveSpacing('xs'),
+    textAlign: 'center',
+  },
+  // Image Viewer Styles
+  imageViewerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+  },
+  imageViewerContainer: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  },
+  imageViewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('md'),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  imageViewerTitle: {
+    fontSize: getResponsiveFontSize('lg'),
+    fontWeight: '600',
+    color: 'white',
+  },
+  imageViewerCloseButton: {
+    padding: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  imageViewerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: getResponsiveSpacing('lg'),
+    paddingVertical: getResponsiveSpacing('lg'),
+  },
+  imageViewerImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: getResponsiveSpacing('md'),
+  },
+  messageOptionsBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 999,
+  },
+  inlineOptionsMenu: {
+    position: 'absolute',
+    top: 0,
+    left: '100%',
+    width: 120,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1000,
+    padding: getResponsiveSpacing('sm'),
+  },
+  inlineOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    borderRadius: 4,
+  },
+  inlineOptionText: {
+    fontSize: getResponsiveFontSize('sm'),
+    marginLeft: getResponsiveSpacing('sm'),
+    fontWeight: '500',
+  },
+  ownerInlineOptionsMenu: {
+    left: 'auto',
+    right: '100%',
+    marginLeft: 0,
+    marginRight: getResponsiveSpacing('sm'),
+  },
+  replyPreview: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('xs'),
+    borderRadius: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('xs'),
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+  },
+  replyPreviewContent: {
+    flexDirection: 'column',
+    paddingHorizontal: getResponsiveSpacing('xs'),
+    paddingVertical: getResponsiveSpacing('xs'),
+  },
+  replyPreviewInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  replyPreviewSender: {
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: '600',
+    marginLeft: getResponsiveSpacing('xs'),
+  },
+  replyPreviewText: {
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: '400',
+    flex: 1,
+    opacity: 0.8,
+  },
+  replyPreviewLine: {
+    width: '100%',
+    height: 1,
+    marginTop: getResponsiveSpacing('xs'),
+  },
+  replyPreviewContainer: {
+    paddingHorizontal: getResponsiveSpacing('md'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('sm'),
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  replyPreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('xs'),
+  },
+  replyPreviewHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  replyPreviewHeaderText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+    marginLeft: getResponsiveSpacing('sm'),
+  },
+  replyPreviewCloseButton: {
+    padding: getResponsiveSpacing('xs'),
+    borderRadius: getResponsiveSpacing('xs'),
+  },
+  replyPreviewMessage: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingVertical: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('xs'),
+    marginHorizontal: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('xs'),
+  },
+  replyPreviewMessageText: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '400',
+    flex: 1,
+    lineHeight: getResponsiveFontSize('sm') * 1.3,
   },
 }); 

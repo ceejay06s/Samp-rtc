@@ -216,6 +216,8 @@ export enum MessageType {
   PHOTO = 'photo',
   VOICE = 'voice',
   LOCATION = 'location',
+  GIF = 'gif',
+  STICKER = 'sticker',
 }
 
 // Conversation related types
