@@ -6,16 +6,16 @@ A modern React Native dating app built with Expo, featuring real-time messaging,
 
 All documentation has been organized in the `README/` folder for better navigation:
 
-- **[📋 Documentation Index](./README-INDEX.md)** - Complete index of all documentation files
-- **[🔧 Setup & Configuration](./README-INDEX.md#-setup--configuration)** - API setup, database configuration
-- **[🐛 Bug Fixes & Error Resolution](./README-INDEX.md#-bug-fixes--error-resolution)** - Common issues and solutions
-- **[💬 Chat & Messaging](./README-INDEX.md#-chat--messaging)** - Real-time communication features
-- **[🎯 Matching & Discovery](./README-INDEX.md#-matching--discovery)** - User matching and discovery features
-- **[📱 UI/UX & Mobile](./README-INDEX.md#-uiux--mobile)** - Mobile optimization and gestures
-- **[📝 Content & Posts](./README-INDEX.md#-content--posts)** - Posts and content management
-- **[🔍 Location & Auto Features](./README-INDEX.md#-location--auto-features)** - Location-based features
-- **[💰 Billing & Plans](./README-INDEX.md#-billing--plans)** - Subscription and billing features
-- **[🎨 Features & Integrations](./README-INDEX.md#-features--integrations)** - Additional features and integrations
+- **[📋 Documentation Index](./README/README-INDEX.md)** - Complete index of all documentation files
+- **[🔧 Setup & Configuration](./README/README-INDEX.md#-setup--configuration)** - API setup, database configuration
+- **[🐛 Bug Fixes & Error Resolution](./README/README-INDEX.md#-bug-fixes--error-resolution)** - Common issues and solutions
+- **[💬 Chat & Messaging](./README/README-INDEX.md#-chat--messaging)** - Real-time communication features
+- **[🎯 Matching & Discovery](./README/README-INDEX.md#-matching--discovery)** - User matching and discovery features
+- **[📱 UI/UX & Mobile](./README/README-INDEX.md#-uiux--mobile)** - Mobile optimization and gestures
+- **[📝 Content & Posts](./README/README-INDEX.md#-content--posts)** - Posts and content management
+- **[🔍 Location & Auto Features](./README/README-INDEX.md#-location--auto-features)** - Location-based features
+- **[💰 Billing & Plans](./README/README-INDEX.md#-billing--plans)** - Subscription and billing features
+- **[🎨 Features & Integrations](./README/README-INDEX.md#-features--integrations)** - Additional features and integrations
 
 ## 🚀 **Quick Start**
 
