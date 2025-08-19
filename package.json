@@ -51,6 +51,7 @@
     "lottie-web": "^5.13.0",
     "markdown-it": "^14.1.0",
     "markitdown": "^0.0.4",
+    "ora": "^8.2.0",
     "pako": "^2.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",

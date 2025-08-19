@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user])
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       console.log('🔐 AuthContext: Starting sign out process');
       await AuthStateService.getInstance().signOut();
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Re-throw the error so components can handle it appropriately
       throw error;
     }
-  }
+  }, []);
 
   // Periodic session checking - only when user is authenticated
   useEffect(() => {
@@ -152,9 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user, isAuthenticated, signOut]);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     await AuthStateService.getInstance().refreshProfile();
-  }
+  }, []);
+
+  const checkSessionValidity = useCallback(() => 
+    AuthStateService.getInstance().checkSessionValidity(), 
+    []
+  );
 
   const value = useMemo(() => ({
     user,
@@ -169,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastLoginTime,
     sessionExpiry,
     isSessionExpired: sessionExpiry ? new Date() > new Date(sessionExpiry) : false,
-    checkSessionValidity: useCallback(() => AuthStateService.getInstance().checkSessionValidity(), []),
+    checkSessionValidity,
   }), [
     user,
     profile,
@@ -182,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     manualLocationUpdate,
     lastLoginTime,
     sessionExpiry,
+    checkSessionValidity,
   ])
 
   return (

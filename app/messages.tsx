@@ -1,15 +1,15 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Platform,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
@@ -46,6 +46,16 @@ export default function MessagesScreen() {
   const { isWeb } = usePlatform();
   const { isBreakpoint } = useViewport();
   const isDesktop = isBreakpoint.xl || isWeb;
+  
+  // Safety check for theme
+  if (!theme) {
+    console.warn('⚠️ MessagesScreen: Theme not initialized, using fallback');
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Loading theme...</Text>
+      </View>
+    );
+  }
   
   // Track navigation for referrer functionality
   useNavigationTracking();
@@ -175,100 +185,106 @@ export default function MessagesScreen() {
   };
 
   // Mock conversations for development
-  const getMockConversations = (): Conversation[] => [
-    {
-      id: 'mock-conv-1',
-      match_id: 'mock-match-1',
-      matchId: 'mock-match-1',
-      participants: [user?.id || '', 'mock-user-1'],
-      lastMessage: {
-        id: 'mock-msg-1',
-        conversation_id: 'mock-conv-1',
-        sender_id: 'mock-user-1',
-        content: 'Hey! How was your hiking trip last weekend? 🏔️',
-        message_type: 'text',
-        is_read: false,
-        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        type: 'text',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        read: false
-      },
-      unread_count: 2,
-      unreadCount: 2,
-      created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      otherProfile: {
-        id: 'mock-profile-1',
-        user_id: 'mock-user-1',
-        first_name: 'Sarah',
-        last_name: 'Johnson',
-        birthdate: '1995-06-15',
-        gender: 'female',
-        bio: 'Love hiking and photography',
-        photos: ['https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=600&fit=crop&crop=faces'],
-        interests: ['hiking', 'photography'],
-        location: 'San Francisco, CA',
-        latitude: 37.7749,
-        longitude: -122.4194,
-        is_online: true,
-        last_seen: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        max_distance: 25,
-        looking_for: ['male'],
-        min_age: 25,
-        max_age: 35
-      }
-    },
-    {
-      id: 'mock-conv-2',
-      match_id: 'mock-match-2',
-      matchId: 'mock-match-2',
-      participants: [user?.id || '', 'mock-user-2'],
-      lastMessage: {
-        id: 'mock-msg-2',
-        conversation_id: 'mock-conv-2',
-        sender_id: user?.id || '',
-        content: 'Thanks for the restaurant recommendation! 🍽️',
-        message_type: 'text',
-        is_read: true,
-        created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        type: 'text',
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        read: true
-      },
-      unread_count: 0,
-      unreadCount: 0,
-      created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      otherProfile: {
-        id: 'mock-profile-2',
-        user_id: 'mock-user-2',
-        first_name: 'Emma',
-        last_name: 'Davis',
-        birthdate: '1992-03-22',
-        gender: 'female',
-        bio: 'Yoga instructor and foodie',
-        photos: ['https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=600&fit=crop&crop=faces'],
-        interests: ['yoga', 'cooking'],
-        location: 'Oakland, CA',
-        latitude: 37.8044,
-        longitude: -122.2711,
-        is_online: false,
-        last_seen: new Date(Date.now() - 3600000).toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        max_distance: 30,
-        looking_for: ['male'],
-        min_age: 28,
-        max_age: 38
-      }
+  const getMockConversations = (): Conversation[] => {
+    if (!user?.id) {
+      return [];
     }
-  ];
+    
+    return [
+      {
+        id: 'mock-conv-1',
+        match_id: 'mock-match-1',
+        matchId: 'mock-match-1',
+        participants: [user.id, 'mock-user-1'],
+        lastMessage: {
+          id: 'mock-msg-1',
+          conversation_id: 'mock-conv-1',
+          sender_id: 'mock-user-1',
+          content: 'Hey! How was your hiking trip last weekend? 🏔️',
+          message_type: 'text',
+          is_read: false,
+          created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          type: 'text',
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
+          read: false
+        },
+        unread_count: 2,
+        unreadCount: 2,
+        created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        otherProfile: {
+          id: 'mock-profile-1',
+          user_id: 'mock-user-1',
+          first_name: 'Sarah',
+          last_name: 'Johnson',
+          birthdate: '1995-06-15',
+          gender: 'female',
+          bio: 'Love hiking and photography',
+          photos: ['https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=600&fit=crop&crop=faces'],
+          interests: ['hiking', 'photography'],
+          location: 'San Francisco, CA',
+          latitude: 37.7749,
+          longitude: -122.4194,
+          is_online: true,
+          last_seen: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          max_distance: 25,
+          looking_for: ['male'],
+          min_age: 25,
+          max_age: 35
+        }
+      },
+      {
+        id: 'mock-conv-2',
+        match_id: 'mock-match-2',
+        matchId: 'mock-match-2',
+        participants: [user.id, 'mock-user-2'],
+        lastMessage: {
+          id: 'mock-msg-2',
+          conversation_id: 'mock-conv-2',
+          sender_id: user.id,
+          content: 'Thanks for the restaurant recommendation! 🍽️',
+          message_type: 'text',
+          is_read: true,
+          created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          type: 'text',
+          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          read: true
+        },
+        unread_count: 0,
+        unreadCount: 0,
+        created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        otherProfile: {
+          id: 'mock-profile-2',
+          user_id: 'mock-user-2',
+          first_name: 'Emma',
+          last_name: 'Davis',
+          birthdate: '1992-03-22',
+          gender: 'female',
+          bio: 'Yoga instructor and foodie',
+          photos: ['https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=600&fit=crop&crop=faces'],
+          interests: ['yoga', 'cooking'],
+          location: 'Oakland, CA',
+          latitude: 37.8044,
+          longitude: -122.2711,
+          is_online: false,
+          last_seen: new Date(Date.now() - 3600000).toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          max_distance: 30,
+          looking_for: ['male'],
+          min_age: 28,
+          max_age: 38
+        }
+      }
+    ];
+  };
 
   const renderConversationItem = ({ item: conversation }: { item: Conversation }) => {
     const otherProfile = conversation.otherProfile;
@@ -345,13 +361,13 @@ export default function MessagesScreen() {
                 numberOfLines={2}
               >
                 {lastMessage 
-                  ? (lastMessage.senderId === user?.id ? 'You: ' : '') + lastMessage.content
+                  ? (lastMessage.sender_id === user?.id ? 'You: ' : '') + (lastMessage.content || '')
                   : 'Start a conversation...'
                 }
               </Text>
             </View>
 
-            {formatLocationForDisplay(otherProfile.location, 'city-state') && (
+            {otherProfile.location && formatLocationForDisplay(otherProfile.location, 'city-state') && (
               <Text style={[styles.location, { color: theme.colors.textSecondary }]}>
                 📍 {formatLocationForDisplay(otherProfile.location, 'city-state')}
               </Text>
@@ -500,7 +516,7 @@ export default function MessagesScreen() {
             title="Sign In"
             onPress={() => router.push('/login')}
             variant="primary"
-            style={{ marginTop: theme.spacing.lg }}
+            style={{ marginTop: theme?.spacing?.lg || 24 }}
           />
         </Card>
       </View>
@@ -566,7 +582,7 @@ export default function MessagesScreen() {
             title="Try Again"
             onPress={() => loadConversations()}
             variant="primary"
-            style={{ marginTop: theme.spacing.lg }}
+            style={{ marginTop: theme?.spacing?.lg || 24 }}
           />
         </Card>
       </View>

@@ -188,6 +188,16 @@ export default function DiscoverScreen() {
       setCurrentIndex(0);
       setCurrentPhotoIndex(0);
       resetPosition();
+      console.log('✅ Profiles loaded successfully:', profiles.length);
+      if (profiles.length > 0) {
+        console.log('📍 First profile location data:', {
+          location: profiles[0].location,
+          latitude: profiles[0].latitude,
+          longitude: profiles[0].longitude,
+          formattedLocation: profiles[0].location ? formatLocationForDisplay(profiles[0].location, 'city-state') : 'No location',
+          fullProfile: profiles[0]
+        });
+      }
     } catch (error) {
       console.error('Failed to load profiles:', error);
       setError(error instanceof Error ? error.message : 'Failed to load profiles');
@@ -206,6 +216,26 @@ export default function DiscoverScreen() {
       loadProfiles();
     }
   }, [loadProfiles, authLoading]);
+
+  // Debug location parsing
+  useEffect(() => {
+    if (profiles.length > 0) {
+      const testLocation = profiles[0].location;
+      console.log('🧪 Testing location parsing:', {
+        original: testLocation,
+        parsed: testLocation ? require('../src/utils/location').parseLocation(testLocation) : null,
+        formatted: testLocation ? require('../src/utils/location').formatLocationForDisplay(testLocation, 'city-state') : null
+      });
+      
+      // Test with known good location
+      const testGoodLocation = 'San Francisco, CA';
+      console.log('🧪 Testing with known good location:', {
+        original: testGoodLocation,
+        parsed: require('../src/utils/location').parseLocation(testGoodLocation),
+        formatted: require('../src/utils/location').formatLocationForDisplay(testGoodLocation, 'city-state')
+      });
+    }
+  }, [profiles]);
 
   const handleLike = useCallback(async () => {
     if (currentIndex >= profiles.length || processingAction) return;
@@ -593,7 +623,25 @@ export default function DiscoverScreen() {
               </View>
               
               <Text style={[styles.profileLocation, { color: theme.colors.textSecondary }]}>
-                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> {formatLocationForDisplay(displayedProfile.location, 'city-state')}
+                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> 
+                {displayedProfile.location ? (
+                  (() => {
+                    try {
+                      return formatLocationForDisplay(displayedProfile.location, 'city-state');
+                    } catch (error) {
+                      console.error('❌ Error formatting location:', error, 'Location:', displayedProfile.location);
+                      return displayedProfile.location || 'Location not available';
+                    }
+                  })()
+                ) : (
+                  'Location not available'
+                )}
+                {/* Debug info */}
+                {__DEV__ && (
+                  <Text style={{ fontSize: 10, opacity: 0.7 }}>
+                    {' '}(Debug: {JSON.stringify(displayedProfile.location)})
+                  </Text>
+                )}
               </Text>
               
               {displayedProfile.bio && (
@@ -682,7 +730,25 @@ export default function DiscoverScreen() {
               </Text>
               
               <Text style={[styles.modalLocation, { color: theme.colors.textSecondary }]}>
-                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> {formatLocationForDisplay(displayedProfile.location, 'city-state')}
+                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> 
+                {displayedProfile.location ? (
+                  (() => {
+                    try {
+                      return formatLocationForDisplay(displayedProfile.location, 'city-state');
+                    } catch (error) {
+                      console.error('❌ Error formatting location in modal:', error, 'Location:', displayedProfile.location);
+                      return displayedProfile.location || 'Location not available';
+                    }
+                  })()
+                ) : (
+                  'Location not available'
+                )}
+                {/* Debug info */}
+                {__DEV__ && (
+                  <Text style={{ fontSize: 10, opacity: 0.7 }}>
+                    {' '}(Debug: {JSON.stringify(displayedProfile.location)})
+                  </Text>
+                )}
               </Text>
               
               {displayedProfile.bio && (
@@ -1079,5 +1145,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  debugButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignSelf: 'center',
+    marginTop: 10,
+  },
+  debugButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

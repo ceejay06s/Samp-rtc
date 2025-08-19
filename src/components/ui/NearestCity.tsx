@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LocationData, LocationService } from '../../services/locationService';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
@@ -10,6 +10,10 @@ interface NearestCityProps {
   onError?: (error: string) => void;
   autoUpdate?: boolean;
   style?: any;
+  // New props for using profile coordinates
+  latitude?: number;
+  longitude?: number;
+  useProfileCoordinates?: boolean;
 }
 
 export const NearestCity: React.FC<NearestCityProps> = ({
@@ -18,39 +22,101 @@ export const NearestCity: React.FC<NearestCityProps> = ({
   onError,
   autoUpdate = true,
   style,
+  // New props for using profile coordinates
+  latitude,
+  longitude,
+  useProfileCoordinates = false,
 }) => {
   const theme = useTheme();
   const [location, setLocation] = useState<LocationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isUsingFallback, setIsUsingFallback] = useState(false);
 
   const getCurrentLocation = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const locationData = await LocationService.getCurrentLocation();
+      let locationData: LocationData | null = null;
+      
+      if (useProfileCoordinates && latitude && longitude) {
+        console.log('📍 NearestCity: Using profile coordinates:', { latitude, longitude });
+        
+        // Use reverse geocoding with profile coordinates
+        const address = await LocationService.reverseGeocode(latitude, longitude);
+        
+        if (address) {
+          locationData = {
+            latitude,
+            longitude,
+            address: address,
+            formattedAddress: address,
+            addressData: undefined, // We'll parse this if needed
+            name: undefined
+          };
+          
+          console.log('✅ NearestCity: Profile coordinates reverse geocoded successfully:', locationData);
+        } else {
+          throw new Error('Unable to reverse geocode profile coordinates');
+        }
+      } else {
+        console.log('📍 NearestCity: Getting current location...');
+        console.log('📍 NearestCity: Requesting permissions...');
+        
+        locationData = await LocationService.getCurrentLocation();
+      }
       
       if (locationData) {
+        console.log('✅ NearestCity: Location obtained successfully:', locationData);
+        console.log('📍 NearestCity: Address data:', locationData.addressData);
+        console.log('📍 NearestCity: Formatted address:', locationData.formattedAddress);
+        
+        // Check if we're using fallback data
+        const isFallback = locationData.formattedAddress?.includes('Coordinates:') || 
+                          locationData.addressData?.city === 'Unknown City';
+        setIsUsingFallback(isFallback);
+        
         setLocation(locationData);
         onLocationUpdate?.(locationData);
       } else {
-        throw new Error('Unable to get current location');
+        console.warn('⚠️ NearestCity: No location data returned');
+        throw new Error('Unable to get location data');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setError(errorMessage);
-      onError?.(errorMessage);
+      console.error('❌ NearestCity: Location error:', errorMessage);
+      console.error('❌ NearestCity: Full error object:', error);
+      
+      // Provide more user-friendly error messages
+      let userFriendlyError = 'Location unavailable';
+      if (errorMessage.includes('Network not available')) {
+        userFriendlyError = 'Internet connection issue';
+      } else if (errorMessage.includes('Nominatim API not accessible')) {
+        userFriendlyError = 'Location services temporarily unavailable';
+      } else if (errorMessage.includes('permission')) {
+        userFriendlyError = 'Location permission denied';
+      } else if (errorMessage.includes('timeout')) {
+        userFriendlyError = 'Location request timed out';
+      } else if (errorMessage.includes('No geocoding services accessible')) {
+        userFriendlyError = 'Using offline location mode';
+      }
+      
+      setError(userFriendlyError);
+      onError?.(userFriendlyError);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (autoUpdate) {
+    if (autoUpdate && !useProfileCoordinates) {
+      getCurrentLocation();
+    } else if (useProfileCoordinates && latitude && longitude) {
+      // If using profile coordinates, get location immediately
       getCurrentLocation();
     }
-  }, [autoUpdate]);
+  }, [autoUpdate, useProfileCoordinates, latitude, longitude]);
 
   // Get display text in city, state, country format
   const getDisplayText = () => {
@@ -86,6 +152,11 @@ export const NearestCity: React.FC<NearestCityProps> = ({
     const address = location.formattedAddress || location.address;
     
     if (address && typeof address === 'string') {
+      // Check if it's just coordinates (fallback case)
+      if (address.includes('Coordinates:')) {
+        return '📍 Current Location';
+      }
+      
       // Split address by commas and extract city, state, country
       const parts = address.split(',').map(part => part.trim());
       
@@ -155,6 +226,22 @@ export const NearestCity: React.FC<NearestCityProps> = ({
       gap: getResponsiveSpacing('sm'),
       flexWrap: 'wrap',
     },
+    retryButton: {
+      marginTop: getResponsiveSpacing('sm'),
+      paddingVertical: getResponsiveSpacing('sm'),
+      paddingHorizontal: getResponsiveSpacing('md'),
+      backgroundColor: theme.colors.primary,
+      borderRadius: getResponsiveSpacing('sm'),
+    },
+    retryText: {
+      color: theme.colors.onPrimary,
+      fontSize: getResponsiveFontSize('md'),
+      fontWeight: 'bold',
+    },
+    fallbackText: {
+      marginTop: getResponsiveSpacing('sm'),
+      textAlign: 'left',
+    },
   });
 
   if (loading && showLoading) {
@@ -173,6 +260,19 @@ export const NearestCity: React.FC<NearestCityProps> = ({
       <Text style={error ? styles.errorText : styles.text}>
         {error ? getDisplayText() : `📍 ${getDisplayText()}`}
       </Text>
+      {isUsingFallback && !error && (
+        <Text style={[styles.fallbackText, { color: theme.colors.textSecondary, fontSize: 12 }]}>
+          🔄 Using offline location (internet available, location services blocked)
+        </Text>
+      )}
+      {error && (
+        <TouchableOpacity 
+          onPress={getCurrentLocation}
+          style={styles.retryButton}
+        >
+          <Text style={styles.retryText}>🔄 Retry</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

@@ -71,6 +71,7 @@ export class AuthStateService {
       console.log('✅ User signed in:', session.user.id);
       
       // Fetch user profile
+      console.log('🔍 Fetching profile for user:', session.user.id);
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -79,7 +80,20 @@ export class AuthStateService {
 
       if (profileError) {
         console.error('❌ Failed to fetch profile:', profileError);
+        console.error('❌ Profile error details:', {
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+          code: profileError.code
+        });
         // Continue with user data even if profile fetch fails
+      } else {
+        console.log('✅ Profile fetched successfully:', {
+          id: profile.id,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          photos: profile.photos?.length || 0
+        });
       }
 
       // Update online status
@@ -201,9 +215,14 @@ export class AuthStateService {
   }
 
   async refreshProfile(): Promise<void> {
-    if (!this.currentState.user) return;
+    if (!this.currentState.user) {
+      console.log('⚠️ refreshProfile: No user available');
+      return;
+    }
 
     try {
+      console.log('🔄 refreshProfile: Fetching profile for user:', this.currentState.user.id);
+      
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -211,16 +230,31 @@ export class AuthStateService {
         .single();
 
       if (error) {
-        console.error('❌ Failed to refresh profile:', error);
+        console.error('❌ refreshProfile: Failed to fetch profile:', error);
+        console.error('❌ refreshProfile: Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         return;
       }
+
+      console.log('✅ refreshProfile: Profile fetched successfully:', {
+        id: profile.id,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        photos: profile.photos?.length || 0
+      });
 
       await this.updateAuthState(
         await supabase.auth.getSession().then(({ data }) => data.session),
         profile
       );
+      
+      console.log('✅ refreshProfile: Auth state updated with new profile');
     } catch (error) {
-      console.error('❌ Error refreshing profile:', error);
+      console.error('❌ refreshProfile: Error refreshing profile:', error);
     }
   }
 

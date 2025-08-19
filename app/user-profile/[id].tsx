@@ -460,10 +460,22 @@ export default function UserProfileScreen() {
               {fullName}
             </Text>
             {/* Location Section */}
-            <NearestCity 
-                  showLoading={false}
-                  
-                />
+            {profile?.latitude && profile?.longitude && (
+              <View style={styles.detailRow}>
+                <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                  Location:
+                </Text>
+                <View style={styles.locationDisplay}>
+                  <NearestCity 
+                    latitude={profile.latitude} 
+                    longitude={profile.longitude} 
+                    useProfileCoordinates={true}
+                    autoUpdate={false}
+                    showLoading={false}
+                  />
+                </View>
+              </View>
+            )}
 
             {/* Age Section */}
             {profile.birthdate && (
@@ -745,7 +757,10 @@ export default function UserProfileScreen() {
                     Location:
                   </Text>
                   <View style={styles.locationDisplay}>
-                    <NearestCity />
+                    {/* NearestCity component was removed, so this will be empty or a placeholder */}
+                    <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                      {profile.latitude ? `${profile.latitude.toFixed(4)}, ${profile.longitude ? profile.longitude.toFixed(4) : 'N/A'}` : 'N/A'}
+                    </Text>
                   </View>
                 </View>
               )}
