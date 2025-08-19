@@ -176,5 +176,10 @@ export const Component: React.FC<ComponentProps> = ({ prop1, prop2 }) => {
 - Document complex business logic
 - Provide setup instructions for new developers
 - Keep architecture decisions documented
+- **README File Organization**: All README files (except the main `README.md`) must be placed in the `README/` folder
+  - Main project overview stays as `README.md` in root directory
+  - All specific documentation files go in `README/` folder
+  - Use descriptive names: `README-FEATURE-NAME.md` or `README-ISSUE-DESCRIPTION.md`
+  - Keep documentation organized by topic/feature/issue
 
 Remember: Always prioritize user experience, maintain code quality, and follow the established patterns in the codebase. When in doubt, refer to existing implementations for consistency. 
