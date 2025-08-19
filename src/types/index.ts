@@ -368,6 +368,7 @@ export interface Post {
   user_id: string;
   content: string;
   images: string[];
+  tgs_files?: string[]; // TGS animated sticker files
   tags?: string[];
   location?: string;
   likes_count: number;

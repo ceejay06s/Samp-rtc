@@ -15,9 +15,10 @@ import { SingleSlider } from '../src/components/ui/Slider';
 import { WebAlert } from '../src/components/ui/WebAlert';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { AuthService } from '../src/services/auth';
-import { EnhancedPhotoUploadService, PhotoType } from '../src/services/enhancedPhotoUpload';
+import { EnhancedPhotoUploadService } from '../src/services/enhancedPhotoUpload';
 import { Profile } from '../src/types';
 
+import * as ImagePicker from 'expo-image-picker';
 import { calculateAge, formatDateToISO } from '../src/utils/dateUtils';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
@@ -65,24 +66,127 @@ export default function ProfileScreen() {
     }
   };
 
+  // Calculate profile completion percentage
+  const calculateProfileCompletion = (): number => {
+    if (!profile) return 0;
+    
+    const fields = [
+      profile.first_name,
+      profile.last_name,
+      profile.birthdate,
+      profile.gender,
+      profile.bio,
+      profile.location,
+      profile.photos?.length > 0,
+      profile.interests?.length > 0,
+      profile.looking_for?.length > 0
+    ];
+    
+    const completedFields = fields.filter(Boolean).length;
+    return Math.round((completedFields / fields.length) * 100);
+  };
+
+  // Get completion color based on percentage
+  const getCompletionColor = (): string => {
+    const completion = calculateProfileCompletion();
+    if (completion >= 80) return '#28a745'; // Green
+    if (completion >= 60) return '#ffc107'; // Yellow
+    if (completion >= 40) return '#fd7e14'; // Orange
+    return '#dc3545'; // Red
+  };
+
+  // Load profile data when component mounts or profile changes
   useEffect(() => {
     if (!authLoading && currentProfile) {
       loadProfile();
     }
   }, [currentProfile, authLoading]);
 
-  const loadProfile = async () => {
-    if (!currentProfile) return;
+  // Initialize profile data when user changes
+  useEffect(() => {
+    if (user && !currentProfile) {
+      // If no profile in context, try to load from database
+      loadProfileFromDatabase();
+    }
+  }, [user, currentProfile]);
+
+  const loadProfileFromDatabase = async () => {
+    if (!user?.id) return;
     
     try {
       setLoading(true);
-      console.log('Loading profile from context:', currentProfile);
+      
+      // Try to refresh profile from context
+      await refreshProfile();
+      
+      // If still no profile, create a default one
+      if (!currentProfile) {
+        const defaultProfile: Partial<Profile> = {
+          user_id: user.id,
+          first_name: '',
+          last_name: '',
+          gender: '',
+          bio: '',
+          location: '',
+          interests: [],
+          looking_for: [],
+          max_distance: 50,
+          min_age: 18,
+          max_age: 100,
+          photos: [],
+        };
+        
+        // Set default values in local state
+        setProfile(defaultProfile as Profile);
+        setFirstName('');
+        setLastName('');
+        setBirthdate(undefined);
+        setGender('');
+        setBio('');
+        setLocation('');
+        setInterests([]);
+        setLookingFor([]);
+        setMaxDistance(50);
+        setMinAge(18);
+        setMaxAge(100);
+        setPhotos([]);
+      }
+    } catch (error) {
+      console.error('Failed to load profile from database:', error);
+      showAlert('Error', 'Failed to load profile from database. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProfile = async () => {
+    if (!currentProfile) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Set profile state
       setProfile(currentProfile);
+      
+      // Set form fields
       setFirstName(currentProfile.first_name || '');
       setLastName(currentProfile.last_name || '');
-      setBirthdate(currentProfile.birthdate ? new Date(currentProfile.birthdate + 'T00:00:00') : undefined);
+      
+      // Handle birthdate
+      if (currentProfile.birthdate) {
+        try {
+          const birthDate = new Date(currentProfile.birthdate + 'T00:00:00');
+          if (!isNaN(birthDate.getTime())) {
+            setBirthdate(birthDate);
+          }
+        } catch (error) {
+          console.error('Error parsing birthdate:', error);
+        }
+      }
+      
       setGender(currentProfile.gender || '');
-      console.log('Loaded gender:', currentProfile.gender);
       setBio(currentProfile.bio || '');
       setLocation(currentProfile.location || '');
       setInterests(currentProfile.interests || []);
@@ -91,6 +195,7 @@ export default function ProfileScreen() {
       setMinAge(currentProfile.min_age || 18);
       setMaxAge(currentProfile.max_age || 100);
       setPhotos(currentProfile.photos || []);
+      
     } catch (error) {
       console.error('Failed to load profile:', error);
       showAlert('Error', 'Failed to load profile. Please try again.');
@@ -189,37 +294,9 @@ export default function ProfileScreen() {
     );
   };
 
-  // New photo upload handler with Edge Function
-  const handlePhotoUpload = async (imageUrl: string) => {
-    if (!user) {
-      showAlert('Error', 'Please log in to add photos');
-      return;
-    }
-
-    try {
-      setUploadingPhoto(true);
-      
-      // Add to local state
-      setPhotos(prev => [...prev, imageUrl]);
-      
-      // Save to profile immediately
-      await AuthService.updateProfile(user.id, { photos: [...photos, imageUrl] });
-      
-      // Show success message
-      showAlert('Success', 'Photo added successfully!');
-      setShowPhotoUpload(false);
-    } catch (error) {
-      console.error('Failed to add photo:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      showAlert('Error', `Failed to add photo: ${errorMessage}`);
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
-  // Enhanced photo upload with Edge Function
+  // Enhanced photo upload with profile-photo bucket
   const handleEnhancedPhotoUpload = async () => {
-    if (!user) {
+    if (!user?.id) {
       showAlert('Error', 'Please log in to add photos');
       return;
     }
@@ -234,26 +311,159 @@ export default function ProfileScreen() {
         return;
       }
 
-      // Upload using Edge Function
-      const result = await EnhancedPhotoUploadService.uploadPhotoWithEdgeFunction(
-        photo,
-        PhotoType.PROFILE
+      // Upload using enhanced profile photo upload service
+      const result = await EnhancedPhotoUploadService.uploadProfilePhotoToProfileBucket(
+        user.id,
+        photo.uri,
+        {
+          quality: 0.8,
+          maxWidth: 800,
+          maxHeight: 800,
+          allowsEditing: true,
+          aspect: [1, 1]
+        }
       );
 
       if (result.success && result.url) {
+        
         // Add to local state
-        setPhotos(prev => [...prev, result.url!]);
+        const newPhotos = [...photos, result.url];
+        setPhotos(newPhotos);
         
         // Save to profile immediately
-        await AuthService.updateProfile(user.id, { photos: [...photos, result.url!] });
+        await AuthService.updateProfile(user.id, { photos: newPhotos });
+        
+        // Refresh profile in context
+        await refreshProfile();
         
         // Show success message
         showAlert('Success', 'Photo uploaded successfully!');
       } else {
+        console.error('❌ Photo upload failed:', result.error);
         showAlert('Error', result.error || 'Failed to upload photo');
       }
     } catch (error) {
-      console.error('Failed to upload photo:', error);
+      console.error('❌ Failed to upload photo:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showAlert('Error', `Failed to upload photo: ${errorMessage}`);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  // Enhanced photo upload from library
+  const handlePickPhotoFromLibrary = async () => {
+    if (!user?.id) {
+      showAlert('Error', 'Please log in to add photos');
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      
+      // Pick image from library
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+
+        // Upload using enhanced profile photo upload service
+        const uploadResult = await EnhancedPhotoUploadService.uploadProfilePhotoToProfileBucket(
+          user.id,
+          asset.uri,
+          {
+            quality: 0.8,
+            allowsEditing: true,
+            aspect: [1, 1]
+          }
+        );
+
+        if (uploadResult.success && uploadResult.url) {
+          
+          // Add to local state
+          const newPhotos = [...photos, uploadResult.url];
+          setPhotos(newPhotos);
+          
+          // Save to profile immediately
+          await AuthService.updateProfile(user.id, { photos: newPhotos });
+          
+          // Refresh profile in context
+          await refreshProfile();
+          
+          // Show success message
+          showAlert('Success', 'Photo uploaded successfully!');
+        } else {
+          console.error('❌ Photo upload failed:', uploadResult.error);
+          showAlert('Error', uploadResult.error || 'Failed to upload photo');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to pick and upload photo:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showAlert('Error', `Failed to upload photo: ${errorMessage}`);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  // Enhanced photo upload with camera
+  const handleTakePhotoWithCamera = async () => {
+    if (!user?.id) {
+      showAlert('Error', 'Please log in to add photos');
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      
+      // Take photo with camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+
+        // Upload using enhanced profile photo upload service
+        const uploadResult = await EnhancedPhotoUploadService.uploadProfilePhotoToProfileBucket(
+          user.id,
+          asset.uri,
+          {
+            quality: 0.8,
+            allowsEditing: true,
+            aspect: [1, 1]
+          }
+        );
+
+        if (uploadResult.success && uploadResult.url) {
+          
+          // Add to local state
+          const newPhotos = [...photos, uploadResult.url];
+          setPhotos(newPhotos);
+          
+          // Save to profile immediately
+          await AuthService.updateProfile(user.id, { photos: newPhotos });
+          
+          // Refresh profile in context
+          await refreshProfile();
+          
+          // Show success message
+          showAlert('Success', 'Photo taken and uploaded successfully!');
+        } else {
+          console.error('❌ Photo upload failed:', uploadResult.error);
+          showAlert('Error', uploadResult.error || 'Failed to upload photo');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to take and upload photo:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showAlert('Error', `Failed to upload photo: ${errorMessage}`);
     } finally {
@@ -274,8 +484,6 @@ export default function ProfileScreen() {
 
 
   const removePhoto = (index: number) => {
-    console.log('🖼️ removePhoto called with index:', index);
-    console.log('🖼️ Current photos:', photos);
     
     if (!user) {
       showAlert('Error', 'Please log in to remove photos');
@@ -284,23 +492,18 @@ export default function ProfileScreen() {
 
     const showDeleteConfirmation = () => {
       if (isWeb) {
-        console.log('🖼️ Showing web delete confirmation');
         WebAlert.showDeleteConfirmation(
           'Remove Photo',
           'Are you sure you want to remove this photo?',
           async () => {
-            console.log('🖼️ Web delete confirmed, removing photo...');
             try {
               const updatedPhotos = photos.filter((_, i) => i !== index);
-              console.log('🖼️ Updated photos array:', updatedPhotos);
               setPhotos(updatedPhotos);
               await AuthService.updateProfile(user.id, { photos: updatedPhotos });
               
               // Refresh profile in context to ensure UI updates
-              console.log('🖼️ Refreshing profile context...');
               await refreshProfile();
               
-              console.log('🖼️ Photo removed successfully!');
               showAlert('Success', 'Photo removed successfully!');
             } catch (error) {
               console.error('❌ Failed to remove photo:', error);
@@ -309,7 +512,6 @@ export default function ProfileScreen() {
           }
         );
       } else {
-        console.log('🖼️ Showing mobile delete confirmation');
         Alert.alert(
           'Remove Photo',
           'Are you sure you want to remove this photo?',
@@ -319,18 +521,14 @@ export default function ProfileScreen() {
               text: 'Remove',
               style: 'destructive',
               onPress: async () => {
-                console.log('🖼️ Mobile delete confirmed, removing photo...');
                 try {
                   const updatedPhotos = photos.filter((_, i) => i !== index);
-                  console.log('🖼️ Updated photos array:', updatedPhotos);
                   setPhotos(updatedPhotos);
                   await AuthService.updateProfile(user.id, { photos: updatedPhotos });
                   
                   // Refresh profile in context to ensure UI updates
-                  console.log('🖼️ Refreshing profile context...');
                   await refreshProfile();
                   
-                  console.log('🖼️ Photo removed successfully!');
                   showAlert('Success', 'Photo removed successfully!');
                 } catch (error) {
                   console.error('❌ Failed to remove photo:', error);
@@ -354,10 +552,12 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-          Loading profile...
-        </Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+            Loading profile...
+          </Text>
+        </View>
       </View>
     );
   }
@@ -365,9 +565,11 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-          Please log in to view your profile
-        </Text>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+            Please log in to view your profile
+          </Text>
+        </View>
       </View>
     );
   }
@@ -376,7 +578,7 @@ export default function ProfileScreen() {
   if (showPhotoUpload) {
     return (
       <PhotoUploadWithCrop
-        onUploadComplete={handlePhotoUpload}
+        onUploadComplete={handleEnhancedPhotoUpload}
         onCancel={() => setShowPhotoUpload(false)}
         aspectRatio={3/4}
       />
@@ -394,6 +596,37 @@ export default function ProfileScreen() {
       </View>
       
       <View style={styles.content}>
+        {/* Profile Status */}
+        {!profile?.id && (
+          <Card style={[styles.section, { backgroundColor: '#fff3cd', borderColor: '#ffc107' }]}>
+            <Text style={[styles.sectionTitle, { color: '#856404' }]}>⚠️ Profile Setup Required</Text>
+            <Text style={[styles.statusText, { color: '#856404' }]}>
+              Your profile is not yet set up. Please fill in the required information below and save your profile.
+            </Text>
+          </Card>
+        )}
+
+        {/* Profile Completion Status */}
+        {profile?.id && calculateProfileCompletion() < 100 && (
+          <Card style={[styles.section, { backgroundColor: '#d1ecf1', borderColor: '#17a2b8' }]}>
+            <Text style={[styles.sectionTitle, { color: '#0c5460' }]}>📊 Profile Completion</Text>
+            <View style={styles.completionBar}>
+              <View 
+                style={[
+                  styles.completionFill, 
+                  { 
+                    width: `${calculateProfileCompletion()}%`,
+                    backgroundColor: getCompletionColor()
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={[styles.completionText, { color: '#0c5460' }]}>
+              {calculateProfileCompletion()}% Complete
+            </Text>
+          </Card>
+        )}
+
         {/* Basic Information */}
         <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Basic Information</Text>
@@ -427,7 +660,6 @@ export default function ProfileScreen() {
           <GenderSelector
             value={gender}
             onValueChange={(newGender) => {
-              console.log('Gender changed from', gender, 'to', newGender);
               setGender(newGender);
             }}
             error={errors.gender}
@@ -477,28 +709,56 @@ export default function ProfileScreen() {
         {/* Photos */}
         <Card style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Photos</Text>
+          
+          {/* Photo Upload Buttons */}
+          <View style={styles.photoUploadButtons}>
+            <TouchableOpacity
+              style={[
+                styles.photoUploadButton,
+                { backgroundColor: theme.colors.primary, marginBottom: 10 }
+              ]}
+              onPress={handlePickPhotoFromLibrary}
+              disabled={uploadingPhoto}
+            >
+              <Text style={[styles.photoUploadButtonText, { color: 'white' }]}>
+                📷 Pick from Library
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.photoUploadButton,
+                { backgroundColor: theme.colors.secondary || '#34C759' }
+              ]}
+              onPress={handleTakePhotoWithCamera}
+              disabled={uploadingPhoto}
+            >
+              <Text style={[styles.photoUploadButtonText, { color: 'white' }]}>
+                📸 Take Photo
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <PhotoGallery
             photos={photos}
             onRemovePhoto={removePhoto}
-            onAddPhoto={addPhoto}
+            onAddPhoto={() => setShowPhotoUpload(true)}
             maxPhotos={6}
             uploading={uploadingPhoto}
-            onFileSelect={handleWebFileSelect}
+            onFileSelect={() => setShowPhotoUpload(true)}
           />
-          
 
-
-          {/* Test Edge Function Photo Upload Button */}
+          {/* Legacy Photo Upload (keeping for backward compatibility) */}
           <TouchableOpacity
             style={[
               styles.testButton,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 10 }
             ]}
-            onPress={handleEnhancedPhotoUpload}
+            onPress={() => setShowPhotoUpload(true)}
             disabled={uploadingPhoto}
           >
             <Text style={[styles.testButtonText, { color: theme.colors.text }]}>
-              {uploadingPhoto ? 'Uploading...' : 'Test Edge Function Photo Upload'}
+              Legacy Photo Upload
             </Text>
           </TouchableOpacity>
         </Card>
@@ -753,11 +1013,6 @@ const styles = StyleSheet.create({
     fontSize: getResponsiveFontSize('xs'),
     marginTop: getResponsiveSpacing('xs'),
   },
-  debugText: {
-    fontSize: getResponsiveFontSize('xs'),
-    marginTop: getResponsiveSpacing('xs'),
-    fontStyle: 'italic',
-  },
   saveButton: {
     marginTop: getResponsiveSpacing('lg'),
     marginBottom: getResponsiveSpacing('xl'),
@@ -889,5 +1144,43 @@ const styles = StyleSheet.create({
   },
   currentLocation: {
     flex: 1,
+  },
+  photoUploadButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: getResponsiveSpacing('md'),
+  },
+  photoUploadButton: {
+    paddingVertical: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('md'),
+    borderRadius: 8,
+    alignItems: 'center',
+    flex: 1,
+    marginHorizontal: getResponsiveSpacing('sm'),
+  },
+  photoUploadButtonText: {
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: '600',
+  },
+  completionBar: {
+    height: 10,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 5,
+    marginTop: getResponsiveSpacing('sm'),
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  completionFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  completionText: {
+    fontSize: getResponsiveFontSize('sm'),
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  statusText: {
+    fontSize: getResponsiveFontSize('sm'),
+    textAlign: 'center',
+    marginTop: getResponsiveSpacing('sm'),
   },
 }); 

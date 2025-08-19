@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { AppState, AppStateStatus } from 'react-native'
 import { useAutoLocation } from '../src/hooks/useAutoLocation'
 import { AuthStateService } from '../src/services/authStateService'
@@ -16,6 +16,8 @@ interface AuthContextType {
   manualLocationUpdate: () => void
   lastLoginTime: string | null
   sessionExpiry: string | null
+  isSessionExpired: boolean
+  checkSessionValidity: () => Promise<{ isValid: boolean; needsRefresh: boolean }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -123,11 +125,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Periodic session checking - only when user is authenticated
+  useEffect(() => {
+    if (!user || !isAuthenticated) return;
+
+    console.log('⏰ Setting up periodic session checking every 5 minutes');
+    
+    const checkSessionInterval = setInterval(async () => {
+      try {
+        console.log('🔄 Periodic session check...');
+        const { isValid } = await AuthStateService.getInstance().checkSessionValidity();
+        if (!isValid) {
+          console.log('🚨 Periodic session check failed, signing out');
+          await signOut();
+        } else {
+          console.log('✅ Periodic session check passed');
+        }
+      } catch (error) {
+        console.error('❌ Error during periodic session check:', error);
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+
+    return () => {
+      console.log('⏰ Clearing periodic session checking');
+      clearInterval(checkSessionInterval);
+    };
+  }, [user, isAuthenticated, signOut]);
+
   const refreshProfile = async () => {
     await AuthStateService.getInstance().refreshProfile();
   }
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     profile,
     loading,
@@ -139,7 +168,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     manualLocationUpdate,
     lastLoginTime,
     sessionExpiry,
-  }
+    isSessionExpired: sessionExpiry ? new Date() > new Date(sessionExpiry) : false,
+    checkSessionValidity: useCallback(() => AuthStateService.getInstance().checkSessionValidity(), []),
+  }), [
+    user,
+    profile,
+    loading,
+    isAuthenticated,
+    signOut,
+    refreshProfile,
+    locationSharing,
+    setLocationSharing,
+    manualLocationUpdate,
+    lastLoginTime,
+    sessionExpiry,
+  ])
 
   return (
     <AuthContext.Provider value={value}>

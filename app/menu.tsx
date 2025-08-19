@@ -264,93 +264,6 @@ export default function MenuScreen() {
     );
   };
 
-  const renderUserProfile = () => {
-    if (loading) {
-      return (
-        <View style={[styles.userProfileCard, { backgroundColor: theme.colors.surface }]}>
-          <View style={styles.userProfileContent}>
-            <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.border }]} />
-            <View style={styles.userInfoPlaceholder}>
-              <View style={[styles.namePlaceholder, { backgroundColor: theme.colors.border }]} />
-              <View style={[styles.detailPlaceholder, { backgroundColor: theme.colors.border }]} />
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    if (!profile) {
-      return null;
-    }
-
-    const avatarUrl = profile.photos && profile.photos.length > 0 
-      ? profile.photos[0] 
-      : null;
-
-    return (
-      <TouchableOpacity 
-        style={[styles.userProfileCard, { backgroundColor: theme.colors.surface }]}
-        onPress={() => router.push(`/user-profile/${user?.id}`)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.userProfileContent}>
-          <View style={styles.avatarContainer}>
-            {avatarUrl ? (
-              <Image 
-                source={{ uri: avatarUrl }} 
-                style={styles.avatar}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
-                <Text style={[styles.avatarText, { color: '#fff' }]}>
-                  {profile.first_name?.charAt(0)?.toUpperCase() || 'U'}
-                </Text>
-              </View>
-            )}
-          </View>
-          
-          <View style={styles.userInfo}>
-            <Text style={[
-              styles.userName,
-              { color: theme.colors.text },
-              isDesktop && { fontSize: getDesktopFontSize('lg') }
-            ]}>
-              {profile.first_name} {profile.last_name}
-            </Text>
-            
-            {/* Location Section */}
-            <View style={styles.locationSection}>
-              <NearestCity 
-                showLoading={false}
-                style={styles.locationDisplay}
-              />
-            </View>
-            
-            {/* Age Section */}
-            <Text style={[
-              styles.userDetails,
-              { color: theme.colors.textSecondary },
-              isDesktop && { fontSize: getDesktopFontSize('sm') }
-            ]}>
-              {profile.birthdate ? `${calculateAge(profile.birthdate)} years old` : 'Age not set'}
-            </Text>
-          </View>
-          
-          <View style={styles.profileArrow}>
-            <Text style={[
-              styles.arrow,
-              { color: theme.colors.textSecondary },
-              isDesktop && { fontSize: getDesktopFontSize('lg') }
-            ]}>
-              ›
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -386,7 +299,109 @@ export default function MenuScreen() {
       </View>
 
       {/* User Profile Section */}
-      {renderUserProfile()}
+      <TouchableOpacity 
+        style={[styles.userProfileCard, { 
+          backgroundColor: theme.colors.surface,
+          borderWidth: 2,
+          borderColor: theme.colors.primary,
+          marginBottom: getResponsiveSpacing('lg')
+        }]}
+        onPress={() => {
+          if (user?.id) {
+            router.push(`/user-profile/${user.id}`);
+          }
+        }}
+        activeOpacity={0.8}
+      >
+        <View style={styles.userProfileContent}>
+          <View style={styles.avatarContainer}>
+            {profile?.photos && profile.photos.length > 0 ? (
+              <Image 
+                source={{ uri: profile.photos[0] }} 
+                style={styles.avatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
+                <Text style={[styles.avatarText, { color: '#fff' }]}>
+                  {profile?.first_name?.charAt(0)?.toUpperCase() || 
+                   profile?.last_name?.charAt(0)?.toUpperCase() ||
+                   user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.userInfo}>
+            <Text style={[
+              styles.userName,
+              { color: theme.colors.text },
+              isDesktop && { fontSize: getDesktopFontSize('lg') }
+            ]}>
+              {profile?.first_name && profile?.last_name 
+                ? `${profile.first_name} ${profile.last_name}`
+                : profile?.first_name 
+                ? profile.first_name
+                : profile?.last_name
+                ? profile.last_name
+                : user?.email || 'User'}
+            </Text>
+            
+            {/* Show email if no profile name */}
+            {user?.email && !profile?.first_name && !profile?.last_name && (
+              <Text style={[
+                styles.userDetails,
+                { color: theme.colors.textSecondary },
+                isDesktop && { fontSize: getDesktopFontSize('sm') }
+              ]}>
+                {user.email}
+              </Text>
+            )}
+            
+            {/* Location Section */}
+            {profile?.latitude && profile?.longitude && (
+              <View style={styles.locationSection}>
+                <NearestCity 
+                  showLoading={false}
+                  style={styles.locationDisplay}
+                />
+              </View>
+            )}
+            
+            {/* Age Section */}
+            {profile?.birthdate && (
+              <Text style={[
+                styles.userDetails,
+                { color: theme.colors.textSecondary },
+                isDesktop && { fontSize: getDesktopFontSize('sm') }
+              ]}>
+                {calculateAge(profile.birthdate)} years old
+              </Text>
+            )}
+            
+            {/* Bio Section */}
+            {profile?.bio && (
+              <Text style={[
+                styles.userBio,
+                { color: theme.colors.textSecondary },
+                isDesktop && { fontSize: getDesktopFontSize('sm') }
+              ]}>
+                {profile.bio}
+              </Text>
+            )}
+          </View>
+          
+          <View style={styles.profileArrow}>
+            <Text style={[
+              styles.arrow,
+              { color: theme.colors.textSecondary },
+              isDesktop && { fontSize: getDesktopFontSize('lg') }
+            ]}>
+              ›
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
 
       {/* Menu Items */}
       <View style={styles.menuSection}>

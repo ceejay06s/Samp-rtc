@@ -9,6 +9,7 @@ import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/respons
 import { useTheme } from '../../utils/themes';
 import { EmojiGifPicker } from './EmojiGifPicker';
 import { Input } from './Input';
+import { TGSSimpleRenderer } from './TGSSimpleRenderer';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -29,7 +30,7 @@ interface PostCardProps {
 }
 
 interface MediaContent {
-  type: 'gif' | 'sticker';
+  type: 'gif' | 'sticker' | 'tgs';
   url: string;
   title?: string;
 }
@@ -221,9 +222,14 @@ export const PostCard: React.FC<PostCardProps> = ({
       // Create the comment content with media
       let content = commentText.trim();
       if (selectedMedia) {
-        const mediaTag = selectedMedia.type === 'gif' 
-          ? `[GIF: ${selectedMedia.url}]`
-          : `[STICKER: ${selectedMedia.url}]`;
+        let mediaTag;
+        if (selectedMedia.type === 'gif') {
+          mediaTag = `[GIF: ${selectedMedia.url}]`;
+        } else if (selectedMedia.type === 'tgs') {
+          mediaTag = `[TGS: ${selectedMedia.url}]`;
+        } else {
+          mediaTag = `[STICKER: ${selectedMedia.url}]`;
+        }
         content = content ? `${content} ${mediaTag}` : mediaTag;
       }
       
@@ -246,9 +252,14 @@ export const PostCard: React.FC<PostCardProps> = ({
       // Create the reply content with media
       let content = replyText.trim();
       if (replySelectedMedia) {
-        const mediaTag = replySelectedMedia.type === 'gif' 
-          ? `[GIF: ${replySelectedMedia.url}]`
-          : `[STICKER: ${replySelectedMedia.url}]`;
+        let mediaTag;
+        if (replySelectedMedia.type === 'gif') {
+          mediaTag = `[GIF: ${replySelectedMedia.url}]`;
+        } else if (replySelectedMedia.type === 'tgs') {
+          mediaTag = `[TGS: ${replySelectedMedia.url}]`;
+        } else {
+          mediaTag = `[STICKER: ${replySelectedMedia.url}]`;
+        }
         content = content ? `${content} ${mediaTag}` : mediaTag;
       }
       
@@ -384,10 +395,13 @@ export const PostCard: React.FC<PostCardProps> = ({
   };
 
   const handleStickerSelect = (stickerUrl: string) => {
+    // Check if it's a TGS file
+    const isTGS = stickerUrl.toLowerCase().endsWith('.tgs');
+    
     const mediaContent: MediaContent = {
-      type: 'sticker',
+      type: isTGS ? 'tgs' : 'sticker',
       url: stickerUrl,
-      title: 'Sticker'
+      title: isTGS ? 'TGS' : 'Sticker'
     };
     
     if (activeInput === 'comment') {
@@ -492,7 +506,7 @@ export const PostCard: React.FC<PostCardProps> = ({
     const comment = comments.find(c => c.id === commentId);
     if (comment) {
       // Remove media tags from content for editing
-      const cleanContent = comment.content.replace(/\[GIF: .+?\]|\[STICKER: .+?\]/g, '').trim();
+      const cleanContent = comment.content.replace(/\[GIF: .+?\]|\[STICKER: .+?\]|\[TGS: .+?\]/g, '').trim();
       setEditCommentText(cleanContent);
       setEditingComment(commentId);
       setCommentOptions(null);
@@ -547,7 +561,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const renderFormattedText = (text: string) => {
     // Remove media tags first
-    const cleanText = text.replace(/\[GIF: .+?\]|\[STICKER: .+?\]/g, '');
+    const cleanText = text.replace(/\[GIF: .+?\]|\[STICKER: .+?\]|\[TGS: .+?\]/g, '');
     
     // Split text into lines to detect lists
     const lines = cleanText.split('\n');
@@ -604,9 +618,10 @@ export const PostCard: React.FC<PostCardProps> = ({
   );
 
   const renderCommentMedia = (comment: PostComment) => {
-    // Check if comment content contains GIF or sticker URLs
+    // Check if comment content contains GIF, sticker, or TGS URLs
     const gifMatch = comment.content.match(/\[GIF: (.+?)\]/);
     const stickerMatch = comment.content.match(/\[STICKER: (.+?)\]/);
+    const tgsMatch = comment.content.match(/\[TGS: (.+?)\]/);
     
     if (gifMatch) {
       const mediaUrl = gifMatch[1];
@@ -635,6 +650,25 @@ export const PostCard: React.FC<PostCardProps> = ({
           />
           <View style={styles.commentMediaTypeBadge}>
             <Text style={styles.commentMediaTypeText}>STICKER</Text>
+          </View>
+        </View>
+      );
+    }
+    
+    if (tgsMatch) {
+      const mediaUrl = tgsMatch[1];
+      return (
+        <View style={styles.commentMediaContainer}>
+          <TGSSimpleRenderer
+            url={mediaUrl}
+            width={80}
+            height={80}
+            autoPlay={true}
+            loop={true}
+            style={styles.commentMedia}
+          />
+          <View style={styles.commentMediaTypeBadge}>
+            <Text style={styles.commentMediaTypeText}>TGS</Text>
           </View>
         </View>
       );
@@ -896,6 +930,32 @@ export const PostCard: React.FC<PostCardProps> = ({
             ))}
           </View>
         )}
+      </View>
+    );
+  };
+
+  const renderTGSFiles = () => {
+    if (!post.tgs_files || post.tgs_files.length === 0) return null;
+
+    return (
+      <View style={styles.tgsContainer}>
+        <Text style={[styles.tgsTitle, { color: theme.colors.textSecondary }]}>
+          Animated Stickers
+        </Text>
+        <View style={styles.tgsGrid}>
+          {post.tgs_files.map((tgsUrl, index) => (
+            <View key={index} style={styles.tgsItem}>
+              <TGSSimpleRenderer
+                url={tgsUrl}
+                width={80}
+                height={80}
+                autoPlay={true}
+                loop={true}
+                style={styles.tgsRenderer}
+              />
+            </View>
+          ))}
+        </View>
       </View>
     );
   };
@@ -1385,6 +1445,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       {renderOptionsMenu()}
       {renderContent()}
       {renderImages()}
+      {renderTGSFiles()}
       {renderStats()}
       {renderActionButtons()}
       {renderComments()}
@@ -1933,6 +1994,30 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: getResponsiveFontSize('xs'),
     fontWeight: 'bold',
+  },
+  tgsContainer: {
+    marginBottom: getResponsiveSpacing('sm'),
+    paddingHorizontal: getResponsiveSpacing('md'),
+  },
+  tgsTitle: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  tgsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: getResponsiveSpacing('sm'),
+  },
+  tgsItem: {
+    borderRadius: getResponsiveSpacing('sm'),
+    overflow: 'hidden',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  tgsRenderer: {
+    borderRadius: getResponsiveSpacing('sm'),
   },
   listItemContainer: {
     flexDirection: 'row',

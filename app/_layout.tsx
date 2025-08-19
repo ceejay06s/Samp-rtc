@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
+import { SessionGuard } from '../src/components/auth';
 import { DesktopSidebar, MobileToolbar } from '../src/components/ui';
 import { useNavigationTracking } from '../src/hooks/useNavigationTracking';
 import { usePlatform } from '../src/hooks/usePlatform';
@@ -47,6 +48,7 @@ function RootLayoutContent() {
             <Stack.Screen name="preferences" />
             <Stack.Screen name="user-profile" />
             <Stack.Screen name="chat" />
+            <Stack.Screen name="session-test" />
           </Stack>
           
           {/* Mobile Toolbar - show on mobile devices and mobile browsers only when logged in */}
@@ -57,10 +59,22 @@ function RootLayoutContent() {
   );
 }
 
+function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  
+  if (!user) {
+    return <>{children}</>;
+  }
+  
+  return <SessionGuard>{children}</SessionGuard>;
+}
+
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootLayoutContent />
+      <AuthenticatedLayout>
+        <RootLayoutContent />
+      </AuthenticatedLayout>
     </AuthProvider>
   );
 }

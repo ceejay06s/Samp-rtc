@@ -3,18 +3,18 @@ import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useAuth } from '../../../lib/AuthContext';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -25,6 +25,7 @@ import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/respons
 import { useTheme } from '../../utils/themes';
 import { EmojiGifPicker } from './EmojiGifPicker';
 import { SafeImage } from './SafeImage';
+import { TGSSimpleRenderer } from './TGSSimpleRenderer';
 
 interface EnhancedRealtimeChatProps {
   conversationId: string;
@@ -195,7 +196,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               ) : isStickerMessage ? (
                 <View style={styles.mediaMessageContainer}>
                   <TouchableOpacity onPress={() => onImagePress?.(message.content, 'sticker')}>
-                    <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                    {message.content.toLowerCase().endsWith('.tgs') ? (
+                      <TGSSimpleRenderer
+                        url={message.content}
+                        width={200}
+                        height={150}
+                        autoPlay={true}
+                        loop={true}
+                        style={styles.mediaMessageImage}
+                      />
+                    ) : (
+                      <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                    )}
                   </TouchableOpacity>
                   <Text style={[styles.mediaMessageText, { color: theme.colors.onPrimary }]}>
                     🎯 Sticker
@@ -247,7 +259,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               ) : isStickerMessage ? (
                 <View style={styles.mediaMessageContainer}>
                   <TouchableOpacity onPress={() => onImagePress?.(message.content, 'sticker')}>
-                    <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                    {message.content.toLowerCase().endsWith('.tgs') ? (
+                      <TGSSimpleRenderer
+                        url={message.content}
+                        width={200}
+                        height={150}
+                        autoPlay={true}
+                        loop={true}
+                        style={styles.mediaMessageImage}
+                      />
+                    ) : (
+                      <Image source={{ uri: message.content }} style={styles.mediaMessageImage} />
+                    )}
                   </TouchableOpacity>
                   <Text style={[styles.mediaMessageText, { color: theme.colors.text }]}>
                     🎯 Sticker
@@ -433,14 +456,25 @@ const ImageViewer: React.FC<{
           </TouchableOpacity>
         </View>
         <View style={styles.imageViewerContent}>
-          <SafeImage 
-            source={{ uri: image.uri }} 
-            style={styles.imageViewerImage}
-            resizeMode="contain"
-            fallbackSize={64}
-            showFallbackText={true}
-            fallbackText="Image not available"
-          />
+          {image.uri.toLowerCase().endsWith('.tgs') ? (
+            <TGSSimpleRenderer
+              url={image.uri}
+              width={400}
+              height={400}
+              autoPlay={true}
+              loop={true}
+              style={styles.imageViewerImage}
+            />
+          ) : (
+            <SafeImage 
+              source={{ uri: image.uri }} 
+              style={styles.imageViewerImage}
+              resizeMode="contain"
+              fallbackSize={64}
+              showFallbackText={true}
+              fallbackText="Image not available"
+            />
+          )}
         </View>
       </View>
     </View>
@@ -727,6 +761,15 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
                   style={styles.mediaPreviewImage}
                   fallbackSize={32}
                   showFallbackText={false}
+                />
+              ) : media.type === 'sticker' && media.url.toLowerCase().endsWith('.tgs') ? (
+                <TGSSimpleRenderer
+                  url={media.url}
+                  width={60}
+                  height={60}
+                  autoPlay={true}
+                  loop={true}
+                  style={styles.mediaPreviewImage}
                 />
               ) : (
                 <View style={styles.mediaPreviewIcon}>

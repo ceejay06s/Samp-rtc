@@ -2,36 +2,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { AuthService } from '../src/services/auth';
+import { useAuth } from '../lib/AuthContext';
 import { useTheme } from '../src/utils/themes';
 
 export default function IndexScreen() {
   const theme = useTheme();
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, loading, user } = useAuth();
 
   useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
-    try {
-      const userData = await AuthService.getCurrentUser();
-      if (userData) {
-        setIsAuthenticated(true);
+    if (!loading) {
+      if (isAuthenticated && user) {
         router.replace('/dashboard');
       } else {
-        setIsAuthenticated(false);
         router.replace('/welcome');
       }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      setIsAuthenticated(false);
-      router.replace('/welcome');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [isAuthenticated, loading, user]);
 
   if (loading) {
     return (

@@ -13,6 +13,7 @@ export { CreatePost } from './CreatePost';
 export { DatePicker } from './DatePicker';
 export { DesktopSidebar } from './DesktopSidebar';
 export { Dropdown } from './Dropdown';
+export { EmojiGifPicker } from './EmojiGifPicker';
 export { EnhancedChatScreen } from './EnhancedChatScreen';
 export { EnhancedRealtimeChat } from './EnhancedRealtimeChat';
 export { ErrorLogger } from './ErrorLogger';
@@ -33,7 +34,9 @@ export { RangeSlider } from './RangeSlider';
 export { RealtimeChat } from './RealtimeChat';
 export { SimpleCarousel } from './SimpleCarousel';
 export { SingleSlider } from './Slider';
+export { StickerPicker } from './StickerPicker';
 export { SwipeableMatchCard } from './SwipeableMatchCard';
+export { TGSRendererV2 } from './TGSRendererV2';
 export { WebAlert } from './WebAlert';
 export { WebFileInput } from './WebFileInput';
 

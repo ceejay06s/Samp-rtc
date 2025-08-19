@@ -5,6 +5,7 @@ import { EnhancedPhotoUploadService, PhotoType } from './enhancedPhotoUpload';
 export interface CreatePostData {
   content: string;
   images?: string[];
+  tgs_files?: string[]; // TGS animated sticker files
   tags?: string[];
   location?: string;
   is_public?: boolean;
@@ -13,6 +14,7 @@ export interface CreatePostData {
 export interface UpdatePostData {
   content?: string;
   images?: string[];
+  tgs_files?: string[]; // TGS animated sticker files
   tags?: string[];
   location?: string;
   is_public?: boolean;
@@ -63,6 +65,7 @@ export class PostService {
         user_id: userId,
         content: data.content,
         images: data.images || [],
+        tgs_files: data.tgs_files || [],
         tags: data.tags || [],
         location: data.location,
         is_public: data.is_public !== false, // default to true

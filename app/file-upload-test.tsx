@@ -118,7 +118,7 @@ export default function FileUploadTestScreen() {
   const testProfileUpload = async () => {
     try {
       setIsUploading(true);
-      addResult('📤 Testing profile photo upload...');
+      addResult('📤 Testing enhanced profile photo upload...');
 
       const hasPermission = await EnhancedPhotoUploadService.requestPermissions();
       if (!hasPermission) {
@@ -128,34 +128,51 @@ export default function FileUploadTestScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
+        allowsEditing: true,
         quality: 0.8,
-        base64: true,
+        aspect: [1, 1],
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const photoData = {
-          uri: asset.uri,
-          width: asset.width,
-          height: asset.height,
-          type: asset.type || 'image/jpeg',
-          base64: asset.base64,
-        };
-
-        const uploadResult = await EnhancedPhotoUploadService.uploadProfilePhoto(photoData);
+        
+        // Use the new enhanced profile photo upload method
+        const uploadResult = await EnhancedPhotoUploadService.uploadProfilePhotoToProfileBucket(
+          'test-user-id', // Replace with actual user ID
+          asset.uri,
+          {
+            quality: 0.8,
+            maxWidth: 800,
+            maxHeight: 800,
+            allowsEditing: true,
+            aspect: [1, 1]
+          }
+        );
 
         if (uploadResult.success) {
-          addResult('✅ Profile upload successful!');
+          addResult('✅ Enhanced profile upload successful!');
           addResult(`URL: ${uploadResult.url}`);
           addResult(`Path: ${uploadResult.path}`);
           addResult(`Bucket: ${uploadResult.bucket}`);
+          
+          // Test updating profile photos array
+          const photoUrls = [uploadResult.url!];
+          const updateResult = await EnhancedPhotoUploadService.updateProfilePhotosArrayInDatabase(
+            'test-user-id',
+            photoUrls
+          );
+          
+          if (updateResult) {
+            addResult('✅ Profile photos array updated successfully!');
+          } else {
+            addResult('❌ Failed to update profile photos array');
+          }
         } else {
-          addResult(`❌ Profile upload failed: ${uploadResult.error}`);
+          addResult(`❌ Enhanced profile upload failed: ${uploadResult.error}`);
         }
       }
     } catch (error) {
-      addResult(`❌ Profile upload error: ${error}`);
+      addResult(`❌ Enhanced profile upload error: ${error}`);
     } finally {
       setIsUploading(false);
     }

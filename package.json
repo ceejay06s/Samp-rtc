@@ -13,6 +13,8 @@
   "dependencies": {
     "@alextbogdanov/react-native-emoji-selector": "^0.2.1",
     "@expo/vector-icons": "^14.1.0",
+    "@lottiefiles/dotlottie-react": "^0.15.0",
+    "@lottiefiles/dotlottie-react-native": "^0.2.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "8.4.1",
     "@react-navigation/bottom-tabs": "^7.3.10",
@@ -20,6 +22,8 @@
     "@react-navigation/native": "^7.1.6",
     "@rneui/themed": "^4.0.0-rc.7",
     "@supabase/supabase-js": "^2.50.5",
+    "@types/markdown-it": "^14.1.2",
+    "@types/twemoji": "^13.1.1",
     "@types/uuid": "^10.0.0",
     "eas": "^0.1.0",
     "emoji-picker-react": "^4.13.2",
@@ -43,6 +47,11 @@
     "expo-symbols": "~0.4.5",
     "expo-system-ui": "~5.0.10",
     "expo-web-browser": "~14.2.0",
+    "lottie-react-native": "^7.3.2",
+    "lottie-web": "^5.13.0",
+    "markdown-it": "^14.1.0",
+    "markitdown": "^0.0.4",
+    "pako": "^2.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-easy-crop": "^5.5.0",
@@ -56,6 +65,8 @@
     "react-native-webview": "13.13.5",
     "rn-range-slider": "^2.2.2",
     "supabase": "^2.31.4",
+    "tgs2json": "^1.0.1",
+    "twemoji": "^14.0.2",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

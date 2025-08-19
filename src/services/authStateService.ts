@@ -7,6 +7,7 @@ export interface AuthState {
   loading: boolean;
   lastLoginTime: string | null;
   sessionExpiry: string | null;
+  isSessionExpired: boolean;
 }
 
 export type AuthStateListener = (state: AuthState) => void;
@@ -21,6 +22,7 @@ export class AuthStateService {
     loading: true,
     lastLoginTime: null,
     sessionExpiry: null,
+    isSessionExpired: false,
   };
 
   static getInstance(): AuthStateService {
@@ -37,6 +39,17 @@ export class AuthStateService {
   private async initializeAuthListener() {
     // Get initial session
     const { data: { session } } = await supabase.auth.getSession();
+    
+    // Check session validity immediately
+    if (session?.user) {
+      const { isValid } = await this.checkSessionValidity();
+      if (!isValid) {
+        console.log('🚨 Initial session check failed, clearing auth state');
+        await this.updateAuthState(null);
+        return;
+      }
+    }
+    
     await this.updateAuthState(session);
 
     // Listen for auth changes
@@ -138,13 +151,18 @@ export class AuthStateService {
   }
 
   private async updateAuthState(session: any, profile?: any) {
+    const now = new Date();
+    const sessionExpiry = session?.expires_at ? new Date(session.expires_at * 1000) : null;
+    const isSessionExpired = sessionExpiry ? now > sessionExpiry : false;
+
     const newState: AuthState = {
-      isAuthenticated: !!session?.user,
+      isAuthenticated: !!session?.user && !isSessionExpired,
       user: session?.user || null,
       profile: profile || null,
       loading: false,
       lastLoginTime: session?.user ? new Date().toISOString() : null,
-      sessionExpiry: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : null,
+      sessionExpiry: sessionExpiry ? sessionExpiry.toISOString() : null,
+      isSessionExpired,
     };
 
     this.currentState = newState;
@@ -246,6 +264,83 @@ export class AuthStateService {
 
   getSessionExpiry(): string | null {
     return this.currentState.sessionExpiry;
+  }
+
+  private lastSessionCheck = 0;
+  private readonly SESSION_CHECK_COOLDOWN = 10000; // 10 seconds cooldown
+
+  async checkSessionValidity(): Promise<{ isValid: boolean; needsRefresh: boolean }> {
+    try {
+      const now = Date.now();
+      
+      // Prevent too frequent session checks
+      if (now - this.lastSessionCheck < this.SESSION_CHECK_COOLDOWN) {
+        console.log('⏰ Session check skipped - too recent, using cached result');
+        return { 
+          isValid: this.currentState.isAuthenticated, 
+          needsRefresh: false 
+        };
+      }
+      
+      this.lastSessionCheck = now;
+      console.log('🔍 Checking session validity...');
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        console.log('❌ No session found');
+        return { isValid: false, needsRefresh: false };
+      }
+
+      const currentTime = new Date();
+      const sessionExpiry = session.expires_at ? new Date(session.expires_at * 1000) : null;
+      
+      console.log('🔍 Session expiry:', sessionExpiry);
+      console.log('🔍 Current time:', currentTime);
+      
+      if (!sessionExpiry) {
+        console.log('❌ No session expiry found');
+        return { isValid: false, needsRefresh: false };
+      }
+
+      // Check if session is expired
+      if (currentTime > sessionExpiry) {
+        console.log('⚠️ Session expired, clearing auth state');
+        await this.updateAuthState(null);
+        return { isValid: false, needsRefresh: false };
+      }
+
+      // Check if session needs refresh (within 5 minutes of expiry)
+      const fiveMinutesFromNow = new Date(currentTime.getTime() + 5 * 60 * 1000);
+      const needsRefresh = sessionExpiry < fiveMinutesFromNow;
+
+      console.log('🔍 Session needs refresh:', needsRefresh);
+
+      if (needsRefresh) {
+        console.log('🔄 Session needs refresh, attempting to refresh...');
+        try {
+          const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
+          if (error) {
+            console.error('❌ Failed to refresh session:', error);
+            return { isValid: false, needsRefresh: false };
+          }
+          if (refreshedSession) {
+            await this.updateAuthState(refreshedSession, this.currentState.profile);
+            console.log('✅ Session refreshed successfully');
+            return { isValid: true, needsRefresh: false };
+          }
+        } catch (refreshError) {
+          console.error('❌ Error refreshing session:', refreshError);
+          return { isValid: false, needsRefresh: false };
+        }
+      }
+
+      console.log('✅ Session is valid');
+      return { isValid: true, needsRefresh: false };
+    } catch (error) {
+      console.error('❌ Error checking session validity:', error);
+      return { isValid: false, needsRefresh: false };
+    }
   }
 
   async signOut(): Promise<void> {

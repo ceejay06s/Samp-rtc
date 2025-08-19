@@ -1,7 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { v4 as uuidv4 } from 'uuid';
 import { EdgeStorageService } from './edgeStorage';
+import { supabase } from '../../lib/supabase';
+import * as FileSystem from 'expo-file-system';
 
 export interface PhotoUploadResult {
   uri: string;
@@ -21,6 +23,14 @@ export interface EnhancedUploadResult {
   messageId?: string; // Add message ID for UUID-based filenames
 }
 
+export interface ProfilePhotoUploadOptions {
+  quality?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+  allowsEditing?: boolean;
+  aspect?: [number, number];
+}
+
 export enum PhotoType {
   PROFILE = 'profile',
   STICKER = 'sticker',
@@ -29,6 +39,9 @@ export enum PhotoType {
 }
 
 export class EnhancedPhotoUploadService {
+  private static readonly PROFILE_BUCKET_NAME = 'profile-photo';
+  private static readonly PROFILE_FOLDER_NAME = 'profile';
+
   /**
    * Generate a UUID for message ID and filename
    */
@@ -42,6 +55,263 @@ export class EnhancedPhotoUploadService {
   static createFilenameFromMessageId(messageId: string, fileType: string): string {
     const extension = fileType.split('/')[1] || 'jpg';
     return `${messageId}.${extension}`;
+  }
+
+  /**
+   * Enhanced profile photo upload to profile-photo bucket
+   */
+  static async uploadProfilePhotoToProfileBucket(
+    userId: string,
+    imageUri: string,
+    options: ProfilePhotoUploadOptions = {}
+  ): Promise<EnhancedUploadResult> {
+    try {
+      console.log('📤 Starting enhanced profile photo upload for user:', userId);
+
+      // Generate unique filename
+      const fileExtension = this.getFileExtension(imageUri);
+      const timestamp = new Date().getTime();
+      const filename = `profile-${timestamp}.${fileExtension}`;
+      
+      // Create the storage path: profile-photo/profile/user-uid/filename
+      const storagePath = `${this.PROFILE_FOLDER_NAME}/${userId}/${filename}`;
+      
+      console.log('📁 Storage path:', storagePath);
+
+      // Convert image to base64 or blob based on platform
+      let fileData: string | Blob;
+      
+      if (Platform.OS === 'web') {
+        // For web, convert to blob
+        fileData = await this.uriToBlob(imageUri);
+      } else {
+        // For mobile, convert to base64
+        fileData = await this.uriToBase64(imageUri);
+      }
+
+      // Upload to Supabase storage
+      const { data, error } = await supabase.storage
+        .from(this.PROFILE_BUCKET_NAME)
+        .upload(storagePath, fileData, {
+          cacheControl: '3600',
+          upsert: false, // Don't overwrite existing files
+        });
+
+      if (error) {
+        console.error('❌ Storage upload error:', error);
+        return {
+          success: false,
+          error: `Upload failed: ${error.message}`,
+          bucket: this.PROFILE_BUCKET_NAME
+        };
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from(this.PROFILE_BUCKET_NAME)
+        .getPublicUrl(storagePath);
+
+      const publicUrl = urlData.publicUrl;
+      
+      console.log('✅ Enhanced profile photo uploaded successfully:', publicUrl);
+
+      return {
+        success: true,
+        url: publicUrl,
+        path: storagePath,
+        bucket: this.PROFILE_BUCKET_NAME
+      };
+
+    } catch (error) {
+      console.error('❌ Exception during enhanced profile photo upload:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        bucket: this.PROFILE_BUCKET_NAME
+      };
+    }
+  }
+
+  /**
+   * Upload multiple profile photos to profile-photo bucket
+   */
+  static async uploadMultipleProfilePhotosToProfileBucket(
+    userId: string,
+    imageUris: string[],
+    options: ProfilePhotoUploadOptions = {}
+  ): Promise<EnhancedUploadResult[]> {
+    const results: EnhancedUploadResult[] = [];
+    
+    for (let i = 0; i < imageUris.length; i++) {
+      const result = await this.uploadProfilePhotoToProfileBucket(userId, imageUris[i], options);
+      results.push(result);
+      
+      // Add small delay between uploads to avoid overwhelming the server
+      if (i < imageUris.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Get all profile photos for a user from profile-photo bucket
+   */
+  static async getUserProfilePhotosFromProfileBucket(userId: string): Promise<string[]> {
+    try {
+      console.log('🔍 Fetching profile photos for user:', userId);
+      
+      const { data, error } = await supabase.storage
+        .from(this.PROFILE_BUCKET_NAME)
+        .list(`${this.PROFILE_FOLDER_NAME}/${userId}`);
+
+      if (error) {
+        console.error('❌ Error listing profile photos:', error);
+        return [];
+      }
+
+      const photoUrls: string[] = [];
+      
+      for (const file of data) {
+        const { data: urlData } = supabase.storage
+          .from(this.PROFILE_BUCKET_NAME)
+          .getPublicUrl(`${this.PROFILE_FOLDER_NAME}/${userId}/${file.name}`);
+        
+        photoUrls.push(urlData.publicUrl);
+      }
+
+      console.log(`✅ Found ${photoUrls.length} profile photos`);
+      return photoUrls;
+    } catch (error) {
+      console.error('❌ Exception fetching profile photos:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Update profile photos array in the profiles table
+   */
+  static async updateProfilePhotosArrayInDatabase(userId: string, photoUrls: string[]): Promise<boolean> {
+    try {
+      console.log('🔄 Updating profile photos array for user:', userId);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          photos: photoUrls,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('❌ Error updating profile photos array:', error);
+        return false;
+      }
+
+      console.log('✅ Profile photos array updated successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Exception updating profile photos array:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Delete a profile photo from profile-photo bucket
+   */
+  static async deleteProfilePhotoFromProfileBucket(storagePath: string): Promise<boolean> {
+    try {
+      console.log('🗑️ Deleting profile photo:', storagePath);
+      
+      const { error } = await supabase.storage
+        .from(this.PROFILE_BUCKET_NAME)
+        .remove([storagePath]);
+
+      if (error) {
+        console.error('❌ Error deleting profile photo:', error);
+        return false;
+      }
+
+      console.log('✅ Profile photo deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Exception deleting profile photo:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get file extension from URI
+   */
+  private static getFileExtension(uri: string): string {
+    const match = uri.match(/\.([a-zA-Z0-9]+)(\?|$)/);
+    return match ? match[1].toLowerCase() : 'jpg';
+  }
+
+  /**
+   * Convert URI to base64 (for mobile)
+   */
+  private static async uriToBase64(uri: string): Promise<string> {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return base64;
+    } catch (error) {
+      console.error('❌ Error converting URI to base64:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert URI to blob (for web)
+   */
+  private static async uriToBlob(uri: string): Promise<Blob> {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      return blob;
+    } catch (error) {
+      console.error('❌ Error converting URI to blob:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validate image file for profile uploads
+   */
+  static validateImageForProfileUpload(imageUri: string): boolean {
+    const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const extension = this.getFileExtension(imageUri);
+    return validExtensions.includes(extension);
+  }
+
+  /**
+   * Get image dimensions for profile uploads
+   */
+  static async getImageDimensionsForProfileUpload(imageUri: string): Promise<{ width: number; height: number } | null> {
+    try {
+      // Use ImagePicker.launchImageLibraryAsync to get image info
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+        base64: false,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        return {
+          width: result.assets[0].width,
+          height: result.assets[0].height
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('❌ Error getting image dimensions:', error);
+      return null;
+    }
   }
 
   /**
@@ -465,6 +735,4 @@ export class EnhancedPhotoUploadService {
     const path = category ? `content/${category}` : 'content';
     return this.uploadPhotoWithEdgeFunction(photo, PhotoType.GENERAL, path);
   }
-
-
 } 

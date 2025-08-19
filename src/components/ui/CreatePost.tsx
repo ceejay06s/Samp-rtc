@@ -9,7 +9,9 @@ import { Profile } from '../../types';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
 import { Button } from './Button';
+import { EmojiGifPicker } from './EmojiGifPicker';
 import { LocationPicker } from './LocationPicker';
+import { TGSSimpleRenderer } from './TGSSimpleRenderer';
 import { WebAlert } from './WebAlert';
 
 interface CreatePostProps {
@@ -26,6 +28,12 @@ interface SelectedImage {
   type: string;
 }
 
+interface SelectedMedia {
+  type: 'gif' | 'sticker' | 'tgs';
+  url: string;
+  title?: string;
+}
+
 export const CreatePost: React.FC<CreatePostProps> = ({
   onSubmit,
   onCancel,
@@ -35,11 +43,13 @@ export const CreatePost: React.FC<CreatePostProps> = ({
   const theme = useTheme();
   const [content, setContent] = useState('');
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   const showAlert = (title: string, message?: string, buttons?: any[]) => {
     if (isWeb) {
@@ -82,6 +92,34 @@ export const CreatePost: React.FC<CreatePostProps> = ({
       console.error('Error picking images:', error);
       showAlert('Error', 'Failed to pick images. Please try again.');
     }
+  };
+
+  const handleGifSelect = (gifUrl: string) => {
+    const mediaContent: SelectedMedia = {
+      type: 'gif',
+      url: gifUrl,
+      title: 'GIF'
+    };
+    setSelectedMedia(prev => [...prev, mediaContent]);
+    setShowMediaPicker(false);
+  };
+
+  const handleStickerSelect = (stickerUrl: string | any) => {
+    // Handle both string URLs and Sticker objects
+    const url = typeof stickerUrl === 'string' ? stickerUrl : stickerUrl.url;
+    const isTGS = url.toLowerCase().endsWith('.tgs');
+    
+    const mediaContent: SelectedMedia = {
+      type: isTGS ? 'tgs' : 'sticker',
+      url: url,
+      title: isTGS ? 'TGS' : 'Sticker'
+    };
+    setSelectedMedia(prev => [...prev, mediaContent]);
+    setShowMediaPicker(false);
+  };
+
+  const removeMedia = (index: number) => {
+    setSelectedMedia(prev => prev.filter((_, i) => i !== index));
   };
 
   const takePhoto = async () => {
@@ -145,8 +183,8 @@ export const CreatePost: React.FC<CreatePostProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (!content.trim() && selectedImages.length === 0) {
-      showAlert('Empty Post', 'Please add some content or photos to your post.');
+    if (!content.trim() && selectedImages.length === 0 && selectedMedia.length === 0) {
+      showAlert('Empty Post', 'Please add some content, photos, or media to your post.');
       return;
     }
 
@@ -155,17 +193,24 @@ export const CreatePost: React.FC<CreatePostProps> = ({
       setUploading(true);
 
       let uploadedImageUrls: string[] = [];
+      let tgsFileUrls: string[] = [];
 
       if (selectedImages.length > 0) {
         const { PostService } = await import('../../services/postService');
         uploadedImageUrls = await PostService.uploadPostImages(selectedImages);
       }
 
+      // Extract TGS file URLs from selected media
+      tgsFileUrls = selectedMedia
+        .filter(media => media.type === 'tgs')
+        .map(media => media.url);
+
       setUploading(false);
 
       const postData: CreatePostData = {
         content: content.trim(),
         images: uploadedImageUrls,
+        tgs_files: tgsFileUrls,
         location: selectedLocation ? (selectedLocation.name || selectedLocation.formattedAddress) : undefined,
         is_public: isPublic,
       };
@@ -175,6 +220,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({
       // Reset form
       setContent('');
       setSelectedImages([]);
+      setSelectedMedia([]);
       setSelectedLocation(null);
       setIsPublic(true);
     } catch (error) {
@@ -224,6 +270,55 @@ export const CreatePost: React.FC<CreatePostProps> = ({
             <Text style={[styles.dropdownIcon, { color: theme.colors.textSecondary }]}>▼</Text>
           </TouchableOpacity>
         </View>
+      </View>
+    );
+  };
+
+  const renderSelectedMedia = () => {
+    if (selectedMedia.length === 0) return null;
+
+    return (
+      <View style={styles.mediaContainer}>
+        <Text style={[styles.mediaTitle, { color: theme.colors.textSecondary }]}>
+          Selected Media ({selectedMedia.length})
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {selectedMedia.map((media, index) => (
+            <View key={index} style={styles.mediaWrapper}>
+              {media.type === 'gif' ? (
+                <Image
+                  source={{ uri: media.url }}
+                  style={styles.selectedMedia}
+                  contentFit="cover"
+                />
+              ) : media.type === 'tgs' ? (
+                <TGSSimpleRenderer
+                  url={media.url}
+                  width={80}
+                  height={80}
+                  autoPlay={true}
+                  loop={true}
+                  style={styles.selectedMedia}
+                />
+              ) : (
+                <Image
+                  source={{ uri: media.url }}
+                  style={styles.selectedMedia}
+                  contentFit="cover"
+                />
+              )}
+              <TouchableOpacity
+                style={styles.removeMediaButton}
+                onPress={() => removeMedia(index)}
+              >
+                <Text style={styles.removeMediaButtonText}>×</Text>
+              </TouchableOpacity>
+              <View style={styles.mediaTypeBadge}>
+                <Text style={styles.mediaTypeText}>{media.type.toUpperCase()}</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       </View>
     );
   };
@@ -292,6 +387,13 @@ export const CreatePost: React.FC<CreatePostProps> = ({
         </TouchableOpacity>
         
         <TouchableOpacity
+          style={[styles.actionButton, selectedMedia.length > 0 && styles.activeActionButton]}
+          onPress={() => setShowMediaPicker(true)}
+        >
+          <Text style={styles.actionIcon}>🎭</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
           style={[styles.actionButton, selectedLocation && styles.activeActionButton]}
           onPress={() => setShowLocationPicker(true)}
           onLongPress={setCurrentLocationQuick}
@@ -316,7 +418,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({
           title={uploading ? 'Uploading...' : 'Post'}
           onPress={handleSubmit}
           loading={submitting}
-          disabled={(!content.trim() && selectedImages.length === 0) || submitting}
+          disabled={(!content.trim() && selectedImages.length === 0 && selectedMedia.length === 0) || submitting}
           size="small"
           style={styles.postButton}
         />
@@ -339,6 +441,7 @@ export const CreatePost: React.FC<CreatePostProps> = ({
         </View>
 
         {renderImages()}
+        {renderSelectedMedia()}
 
         {selectedLocation && (
           <View style={[styles.locationContainer, { backgroundColor: theme.colors.surface }]}>
@@ -372,6 +475,21 @@ export const CreatePost: React.FC<CreatePostProps> = ({
           placeholder="Search for places, addresses, or businesses"
           autoDetectLocation={true}
           showSaveButton={true}
+        />
+      </Modal>
+
+      {/* Media Picker Modal */}
+      <Modal
+        visible={showMediaPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <EmojiGifPicker
+          visible={showMediaPicker}
+          onClose={() => setShowMediaPicker(false)}
+          onEmojiSelect={() => {}} // Not used in post creation
+          onGifSelect={handleGifSelect}
+          onStickerSelect={handleStickerSelect}
         />
       </Modal>
     </View>
@@ -553,5 +671,55 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     fontSize: getResponsiveFontSize('xl'),
+  },
+  mediaContainer: {
+    marginBottom: getResponsiveSpacing('md'),
+    paddingHorizontal: getResponsiveSpacing('md'),
+  },
+  mediaTitle: {
+    fontSize: getResponsiveFontSize('sm'),
+    fontWeight: '600',
+    marginBottom: getResponsiveSpacing('sm'),
+  },
+  mediaWrapper: {
+    position: 'relative',
+    marginRight: getResponsiveSpacing('sm'),
+    borderRadius: getResponsiveSpacing('sm'),
+    overflow: 'hidden',
+  },
+  selectedMedia: {
+    width: 80,
+    height: 80,
+    borderRadius: getResponsiveSpacing('sm'),
+  },
+  removeMediaButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 12,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeMediaButtonText: {
+    color: '#fff',
+    fontSize: getResponsiveFontSize('md'),
+    fontWeight: 'bold',
+  },
+  mediaTypeBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 5,
+    paddingHorizontal: getResponsiveSpacing('xs'),
+    paddingVertical: 2,
+  },
+  mediaTypeText: {
+    color: '#fff',
+    fontSize: getResponsiveFontSize('xs'),
+    fontWeight: 'bold',
   },
 }); 
