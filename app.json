@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yourcompany.samp-rtc",
-      "deploymentTarget": "13.0",
+      "deploymentTarget": "15.4",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "UIStatusBarHidden": false,
