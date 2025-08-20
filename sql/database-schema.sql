@@ -58,7 +58,10 @@ CREATE TABLE messages (
   content TEXT NOT NULL,
   message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'photo', 'voice')),
   is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  metadata JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Voice calls table

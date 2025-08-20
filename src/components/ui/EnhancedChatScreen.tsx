@@ -254,12 +254,15 @@ export const EnhancedChatScreen: React.FC<EnhancedChatScreenProps> = ({
           }
         ]}>
           {isVoiceMessage ? (
-            <View style={styles.voiceMessageContainer}>
-              <MaterialIcons name="play-arrow" size={24} color={theme.colors.onPrimary} />
-              <Text style={[styles.voiceMessageText, { color: theme.colors.onPrimary }]}>
-                Voice Message {message.metadata?.audioDuration ? `(${formatDuration(message.metadata.audioDuration)})` : ''}
-              </Text>
-            </View>
+            <VoiceMessagePlayer
+              audioUrl={message.metadata?.audioUrl || ''}
+              duration={message.metadata?.audioDuration || 0}
+              isOwnMessage={isMyMessage}
+              messageId={message.id}
+              onPlay={() => console.log('Voice message started playing')}
+              onPause={() => console.log('Voice message paused')}
+              onEnd={() => console.log('Voice message finished')}
+            />
           ) : isLocationMessage ? (
             <View style={styles.locationMessageContainer}>
               <MaterialIcons name="location-on" size={20} color={theme.colors.onPrimary} />

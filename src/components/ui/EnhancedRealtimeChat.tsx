@@ -3,20 +3,21 @@ import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../../lib/AuthContext';
+import { useAudioManager } from '../../hooks/useAudioManager';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useRealtimeChat } from '../../hooks/useRealtimeChat';
 import { useViewport } from '../../hooks/useViewport';
@@ -26,6 +27,7 @@ import { useTheme } from '../../utils/themes';
 import { EmojiGifPicker } from './EmojiGifPicker';
 import { SafeImage } from './SafeImage';
 import { TGSSimpleRenderer } from './TGSSimpleRenderer';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 interface EnhancedRealtimeChatProps {
   conversationId: string;
@@ -164,7 +166,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
                 <TouchableOpacity
                   style={styles.inlineOptionItem}
-                  onPress={() => onDeleteMessage?.(message)}
+                  onPress={() => {
+                    console.log('🗑️ Delete button clicked for message:', message.id);
+                    onDeleteMessage?.(message);
+                  }}
                 >
                   <MaterialIcons name="delete" size={16} color={theme.colors.error} />
                   <Text style={[styles.inlineOptionText, { color: theme.colors.error }]}>
@@ -222,10 +227,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     📷 Photo
                   </Text>
                 </View>
+              ) : isVoiceMessage ? (
+                <VoiceMessagePlayer
+                  audioUrl={message.metadata?.audioUrl || ''}
+                  duration={message.metadata?.audioDuration || 0}
+                  isOwnMessage={true}
+                  messageId={message.id}
+                  onPlay={() => console.log('Voice message started playing')}
+                  onPause={() => console.log('Voice message paused')}
+                  onEnd={() => console.log('Voice message finished')}
+                />
               ) : (
                 <Text style={[styles.messageText, styles.ownMessageText]}>
-          {message.content}
-        </Text>
+                  {message.content}
+                </Text>
               )}
               {message.is_read && (
           <Text style={[styles.readIndicator, { color: theme.colors.onPrimary }]}>
@@ -285,6 +300,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     📷 Photo
                   </Text>
                 </View>
+              ) : isVoiceMessage ? (
+                <VoiceMessagePlayer
+                  audioUrl={message.metadata?.audioUrl || ''}
+                  duration={message.metadata?.audioDuration || 0}
+                  isOwnMessage={false}
+                  messageId={message.id}
+                  onPlay={() => console.log('Voice message started playing')}
+                  onPause={() => console.log('Voice message paused')}
+                  onEnd={() => console.log('Voice message finished')}
+                />
               ) : (
                 <Text style={[styles.messageText, styles.otherMessageText]}>
                   {message.content}
@@ -492,6 +517,27 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   const isDesktop = isBreakpoint.xl || isDesktopBrowser;
   
   const { user } = useAuth();
+  useAudioManager();
+  
+  // Cross-platform alert helper
+  const showAlert = (title: string, message: string, buttons?: any[]) => {
+    if (isWeb) {
+      if (buttons && buttons.length > 0) {
+        // For confirmation dialogs, use confirm
+        const confirmed = window.confirm(message);
+        if (confirmed && buttons[1]?.onPress) {
+          buttons[1].onPress();
+        }
+      } else {
+        // For simple alerts, use alert
+        window.alert(message);
+      }
+    } else {
+      // Mobile platform: use React Native Alert
+      Alert.alert(title, message, buttons);
+    }
+  };
+  
   const [messageText, setMessageText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -513,12 +559,16 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
 
   // Message options handlers
   const handleMessageLongPress = (message: any) => {
+    console.log('🔍 Message long press:', message.id, 'Current selected:', selectedMessage?.id, 'Show options:', showMessageOptions);
+    
     if (selectedMessage?.id === message.id && showMessageOptions) {
       // If clicking the same message and options are already shown, hide them
+      console.log('🔍 Hiding options for message:', message.id);
       setShowMessageOptions(false);
       setSelectedMessage(null);
     } else {
       // Show options for the clicked message
+      console.log('🔍 Showing options for message:', message.id);
       setSelectedMessage(message);
       setShowMessageOptions(true);
     }
@@ -537,34 +587,110 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
         navigator.clipboard.writeText(message.content);
       } else {
         // For mobile, we'll need to implement clipboard functionality
-        Alert.alert('Copied!', 'Message copied to clipboard');
+        showAlert('Copied!', 'Message copied to clipboard');
       }
     }
     handleMessageOptionsClose();
   };
 
-  const handleDeleteMessage = (message: any) => {
-    Alert.alert(
-      'Delete Message',
-      'Are you sure you want to delete this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // TODO: Implement message deletion
-              console.log('Deleting message:', message.id);
-              handleMessageOptionsClose();
-            } catch (error) {
-              console.error('Error deleting message:', error);
-              Alert.alert('Error', 'Failed to delete message');
-            }
+  const handleDeleteMessage = async (message: any) => {
+    console.log('🔍 Delete message triggered for:', message.id, message);
+    
+    // Cross-platform confirmation dialog
+    const isWeb = typeof window !== 'undefined' && window.document;
+    
+    if (isWeb) {
+      // Web browser: use browser's confirm dialog
+      console.log('🌐 Web platform detected, using browser confirm');
+      const confirmed = window.confirm('Are you sure you want to delete this message? This action cannot be undone.');
+      
+      if (confirmed) {
+        try {
+          console.log('🗑️ Delete confirmed, proceeding with deletion...');
+          console.log('🔍 deleteMessage function available:', typeof deleteMessage);
+          
+          // Delete the message using the hook's deleteMessage function
+          const success = await deleteMessage(message.id);
+          
+          console.log('🔍 Delete result:', success);
+          
+          if (success) {
+            console.log('✅ Message deleted successfully');
+            
+            // Show success feedback
+            window.alert('Message deleted successfully');
+          } else {
+            throw new Error('Delete operation failed');
           }
+          
+          handleMessageOptionsClose();
+        } catch (error) {
+          console.error('❌ Error deleting message:', error);
+          window.alert('Failed to delete message. Please try again.');
         }
-      ]
-    );
+      } else {
+        console.log('❌ Delete cancelled by user');
+      }
+    } else {
+      // Mobile platform: use React Native Alert
+      console.log('📱 Mobile platform detected, using React Native Alert');
+      try {
+        Alert.alert(
+          'Delete Message',
+          'Are you sure you want to delete this message? This action cannot be undone.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Delete', 
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  console.log('🗑️ Delete confirmed, proceeding with deletion...');
+                  console.log('🔍 deleteMessage function available:', typeof deleteMessage);
+                  
+                  // Delete the message using the hook's deleteMessage function
+                  const success = await deleteMessage(message.id);
+                  
+                  console.log('🔍 Delete result:', success);
+                  
+                  if (success) {
+                    console.log('✅ Message deleted successfully');
+                    
+                    // Show success feedback
+                    Alert.alert('Success', 'Message deleted successfully');
+                  } else {
+                    throw new Error('Delete operation failed');
+                  }
+                  
+                  handleMessageOptionsClose();
+                } catch (error) {
+                  console.error('❌ Error deleting message:', error);
+                  Alert.alert('Error', 'Failed to delete message. Please try again.');
+                }
+              }
+            }
+          ]
+        );
+        
+        console.log('✅ Alert.alert called successfully');
+      } catch (alertError) {
+        console.error('❌ Alert.alert failed:', alertError);
+        
+        // Fallback: try to delete directly without confirmation
+        console.log('🔄 Attempting direct deletion as fallback...');
+        try {
+          const success = await deleteMessage(message.id);
+          if (success) {
+            console.log('✅ Message deleted successfully (fallback)');
+            handleMessageOptionsClose();
+          } else {
+            console.error('❌ Direct deletion failed');
+          }
+        } catch (deleteError) {
+          console.error('❌ Direct deletion error:', deleteError);
+        }
+      }
+    }
   };
 
   const handleReplyToMessage = (message: any) => {
@@ -587,7 +713,7 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   };
 
   const handleReportMessage = (message: any) => {
-    Alert.alert(
+    showAlert(
       'Report Message',
       'Are you sure you want to report this message?',
       [
@@ -599,11 +725,11 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
             try {
               // TODO: Implement message reporting
               console.log('Reporting message:', message.id);
-              Alert.alert('Reported', 'Message has been reported');
+              showAlert('Reported', 'Message has been reported');
               handleMessageOptionsClose();
             } catch (error) {
               console.error('Error reporting message:', error);
-              Alert.alert('Error', 'Failed to report message');
+              showAlert('Error', 'Failed to report message');
             }
           }
         }
@@ -633,7 +759,9 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
     searchResults,
     messageCount,
     unreadCount,
-    refreshMessages
+    refreshMessages,
+    sendVoiceMessage,
+    deleteMessage,
   } = useRealtimeChat({
     conversationId,
     enableTypingIndicators: true,
@@ -972,8 +1100,8 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
       setRecordingDuration(0);
 
       if (uri) {
-        // Send voice message
-        await sendMessage(uri, MessageType.VOICE);
+        // Send voice message using the dedicated voice message method
+        await sendVoiceMessage(uri, recordingDuration);
       }
     } catch (error) {
       console.error('Error stopping recording:', error);

@@ -54,7 +54,7 @@ const bucketConfigs: BucketConfig[] = [
     name: 'chat-media',
     public: true,
     file_size_limit: 52428800, // 50MB
-    allowed_mime_types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'text/plain']
+    allowed_mime_types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/webm', 'text/plain']
   }
 ];
 

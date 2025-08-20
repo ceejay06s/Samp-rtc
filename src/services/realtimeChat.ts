@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { Message, MessageType } from '../types';
+import { AudioUploadService } from './audioUploadService';
 import { EnhancedPhotoUploadService, PhotoType } from './enhancedPhotoUpload';
 
 export interface TypingIndicator {
@@ -772,6 +773,214 @@ export class RealtimeChatService {
     } catch (error) {
       console.error('❌ Failed to get online status:', error);
       return [];
+    }
+  }
+
+  /**
+   * Send voice message with audio upload via Edge Function
+   */
+  async sendVoiceMessage(
+    conversationId: string,
+    audioUri: string,
+    duration: number,
+    metadata?: any
+  ): Promise<RealtimeMessage> {
+    try {
+      console.log('🎤 Sending voice message via Edge Function');
+
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('❌ Authentication error:', authError);
+        throw new Error(`Authentication failed: ${authError.message}`);
+      }
+      
+      if (!user) {
+        console.error('❌ No authenticated user found');
+        throw new Error('User not authenticated');
+      }
+
+      console.log('✅ User authenticated:', user.id);
+
+      // Convert audio URI to blob
+      const response = await fetch(audioUri);
+      const audioBlob = await response.blob();
+
+      console.log('✅ Audio converted to blob, size:', audioBlob.size, 'bytes');
+
+      // Use AudioUploadService to upload via Edge Function
+      const audioUploadService = AudioUploadService.getInstance();
+      
+      const uploadResult = await audioUploadService.uploadAudioViaEdgeFunction({
+        audioBlob,
+        conversationId,
+        duration,
+        metadata
+      });
+
+      if (!uploadResult.success) {
+        throw new Error(`Audio upload failed: ${uploadResult.error}`);
+      }
+
+      console.log('✅ Audio uploaded successfully via Edge Function');
+
+      // If the Edge Function created the message, we're done
+      if (uploadResult.messageId) {
+        // Fetch the created message to return it
+        const { data: messageData, error: fetchError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('id', uploadResult.messageId)
+          .single();
+
+        if (fetchError) {
+          throw new Error(`Failed to fetch created message: ${fetchError.message}`);
+        }
+
+        console.log('✅ Voice message retrieved:', messageData.id);
+
+        return {
+          id: messageData.id,
+          conversation_id: messageData.conversation_id,
+          sender_id: messageData.sender_id,
+          content: messageData.content,
+          message_type: messageData.message_type,
+          created_at: messageData.created_at,
+          updated_at: messageData.updated_at,
+          is_read: messageData.is_read,
+          metadata: messageData.metadata,
+          deleted_at: messageData.deleted_at
+        } as RealtimeMessage;
+      }
+
+      // Fallback: Create message manually if Edge Function didn't create it
+      console.log('⚠️ Edge Function didn\'t create message, creating manually...');
+      
+      const { data: messageData, error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          content: 'Voice message',
+          message_type: MessageType.VOICE,
+          metadata: {
+            audioUrl: uploadResult.audioUrl,
+            audioDuration: duration,
+            uploadedVia: 'edge-function-fallback',
+            ...metadata
+          }
+        })
+        .select()
+        .single();
+
+      if (messageError) {
+        console.error('❌ Failed to create voice message:', messageError);
+        throw new Error(`Failed to create voice message: ${messageError.message}`);
+      }
+
+      console.log('✅ Voice message created successfully (fallback):', messageData.id);
+
+      // Return the created message
+      return {
+        id: messageData.id,
+        conversation_id: messageData.conversation_id,
+        sender_id: messageData.sender_id,
+        content: messageData.content,
+        message_type: messageData.message_type,
+        created_at: messageData.created_at,
+        updated_at: messageData.updated_at,
+        is_read: messageData.is_read,
+        metadata: messageData.metadata,
+        deleted_at: messageData.deleted_at
+      } as RealtimeMessage;
+
+    } catch (error) {
+      console.error('❌ Failed to send voice message:', error);
+      throw new Error(`Failed to send voice message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Delete a message (soft delete by setting deleted_at timestamp)
+   */
+  async deleteMessage(messageId: string, userId: string): Promise<boolean> {
+    try {
+      console.log('🗑️ Deleting message:', messageId, 'for user:', userId);
+
+      // Get current user to verify ownership
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Verify the message belongs to the user
+      const { data: messageData, error: fetchError } = await supabase
+        .from('messages')
+        .select('sender_id, deleted_at')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchError) {
+        console.error('❌ Failed to fetch message for deletion:', fetchError);
+        throw new Error(`Failed to fetch message: ${fetchError.message}`);
+      }
+
+      if (!messageData) {
+        throw new Error('Message not found');
+      }
+
+      if (messageData.sender_id !== user.id) {
+        throw new Error('You can only delete your own messages');
+      }
+
+      if (messageData.deleted_at) {
+        console.log('⚠️ Message already deleted');
+        return true; // Already deleted
+      }
+
+      // Soft delete the message by setting deleted_at timestamp
+      const { error: deleteError } = await supabase
+        .from('messages')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+
+      if (deleteError) {
+        console.error('❌ Failed to delete message:', deleteError);
+        throw new Error(`Failed to delete message: ${deleteError.message}`);
+      }
+
+      console.log('✅ Message deleted successfully:', messageId);
+
+      // Notify real-time subscribers about the deletion
+      this.notifyMessageDeleted(messageId);
+
+      return true;
+
+    } catch (error) {
+      console.error('❌ Failed to delete message:', error);
+      throw new Error(`Failed to delete message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Notify subscribers about message deletion
+   */
+  private notifyMessageDeleted(messageId: string): void {
+    const callback = this.messageCallbacks.get('deletion');
+    if (callback) {
+      callback({
+        id: messageId,
+        conversation_id: '',
+        sender_id: '',
+        content: '',
+        message_type: MessageType.TEXT,
+        created_at: '',
+        updated_at: '',
+        is_read: false,
+        deleted_at: new Date().toISOString()
+      } as RealtimeMessage);
     }
   }
 } 

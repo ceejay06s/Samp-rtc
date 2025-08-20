@@ -25,6 +25,7 @@ import { getResponsiveFontSize, getResponsiveSpacing } from '../../utils/respons
 import { useTheme } from '../../utils/themes';
 import { EmojiGifPicker } from './EmojiGifPicker';
 import { SafeImage } from './SafeImage';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 interface RealtimeChatProps {
   conversationId: string;
@@ -58,6 +59,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimes
   const isGifMessage = message.message_type === MessageType.GIF;
   const isStickerMessage = message.message_type === MessageType.STICKER;
   const isPhotoMessage = message.message_type === MessageType.PHOTO;
+  const isVoiceMessage = message.message_type === MessageType.VOICE;
   
   return (
     <View style={[
@@ -90,6 +92,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isOwn, showTimes
               📷 Photo
             </Text>
           </View>
+        ) : isVoiceMessage ? (
+          <VoiceMessagePlayer
+            audioUrl={message.metadata?.audioUrl || ''}
+            duration={message.metadata?.audioDuration || 0}
+            isOwnMessage={isOwn}
+            messageId={message.id}
+            onPlay={() => console.log('Voice message started playing')}
+            onPause={() => console.log('Voice message paused')}
+            onEnd={() => console.log('Voice message finished')}
+          />
         ) : (
           <Text style={[
             styles.messageText,
@@ -179,6 +191,7 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
   const {
     messages,
     sendMessage,
+    sendVoiceMessage,
     isLoading,
     error,
     typingUsers,
@@ -423,7 +436,7 @@ export const RealtimeChat: React.FC<RealtimeChatProps> = ({
 
       if (uri) {
         // Send voice message
-        await sendMessage(uri, MessageType.VOICE);
+        await sendVoiceMessage(uri, recordingDuration);
       }
     } catch (error) {
       console.error('Error stopping recording:', error);

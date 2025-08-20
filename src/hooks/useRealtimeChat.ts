@@ -19,6 +19,8 @@ export interface UseRealtimeChatReturn {
   messages: RealtimeMessage[];
   sendMessage: (content: string, messageType?: MessageType, metadata?: any) => Promise<void>;
   sendImageMessage: (imageData: ImageUploadData, caption?: string, metadata?: any) => Promise<void>;
+  sendVoiceMessage: (audioUri: string, duration: number, metadata?: any) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<boolean>;
   isLoading: boolean;
   error: string | null;
   
@@ -379,6 +381,32 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
     }
   }, [user?.id, options.conversationId, options.enableTypingIndicators]);
 
+  // Send voice message
+  const sendVoiceMessage = useCallback(async (audioUri: string, duration: number, metadata?: any) => {
+    if (!user?.id) return;
+
+    try {
+      setError(null);
+      
+      const message = await realtimeService.current.sendVoiceMessage(
+        options.conversationId,
+        audioUri,
+        duration,
+        metadata
+      );
+
+      // Stop typing indicator
+      if (options.enableTypingIndicators) {
+        await sendTypingIndicator(false);
+      }
+
+      console.log('✅ Voice message sent:', message.id);
+    } catch (err) {
+      console.error('❌ Failed to send voice message:', err);
+      setError(err instanceof Error ? err.message : 'Failed to send voice message');
+    }
+  }, [user?.id, options.conversationId, options.enableTypingIndicators]);
+
   // Send typing indicator with debouncing
   const sendTypingIndicator = useCallback(async (isTyping: boolean) => {
     if (!options.enableTypingIndicators) return;
@@ -449,6 +477,32 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
     setError(null);
   }, []);
 
+  // Delete message
+  const deleteMessage = useCallback(async (messageId: string): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    try {
+      setError(null);
+      
+      const success = await realtimeService.current.deleteMessage(messageId, user.id);
+      
+      if (success) {
+        // Remove the deleted message from local state
+        setMessages(prevMessages => 
+          prevMessages.filter(msg => msg.id !== messageId)
+        );
+        
+        console.log('✅ Message deleted successfully:', messageId);
+      }
+      
+      return success;
+    } catch (err) {
+      console.error('❌ Failed to delete message:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete message');
+      return false;
+    }
+  }, [user?.id]);
+
   // Update online status when app becomes active/inactive
   useEffect(() => {
     const handleAppStateChange = (isActive: boolean) => {
@@ -471,6 +525,8 @@ export const useRealtimeChat = (options: UseRealtimeChatOptions): UseRealtimeCha
     messages,
     sendMessage,
     sendImageMessage,
+    sendVoiceMessage,
+    deleteMessage,
     isLoading,
     error,
     
