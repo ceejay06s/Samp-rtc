@@ -5,7 +5,11 @@ import { useTheme } from '../src/utils/themes';
 
 export default function TGSSimpleTestScreen() {
   const theme = useTheme();
-  const [libraryStatus, setLibraryStatus] = useState<any>(null);
+  const [libraryStatus, setLibraryStatus] = useState({
+    pako: false,
+    lottie: false,
+    // Note: tgs2json has been removed due to compatibility issues
+  });
   const [testResults, setTestResults] = useState<string[]>([]);
 
   const runLibraryCheck = () => {
@@ -20,10 +24,8 @@ export default function TGSSimpleTestScreen() {
       setTestResults(prev => [...prev, `Library check error: ${error}`]);
       // Set a basic status even if the check fails
       setLibraryStatus({
-        tgs2json: false,
         pako: false,
-        lottieWeb: false,
-        lottieReactNative: false,
+        lottie: false,
       });
     }
   };
@@ -102,14 +104,6 @@ export default function TGSSimpleTestScreen() {
           </Text>
           <View style={styles.statusRow}>
             <Text style={[styles.statusLabel, { color: theme.colors.textSecondary }]}>
-              tgs2json:
-            </Text>
-            <Text style={[styles.statusValue, { color: libraryStatus.tgs2json ? theme.colors.success : theme.colors.error }]}>
-              {libraryStatus.tgs2json ? '✓ Available' : '✗ Not Available'}
-            </Text>
-          </View>
-          <View style={styles.statusRow}>
-            <Text style={[styles.statusLabel, { color: theme.colors.textSecondary }]}>
               pako:
             </Text>
             <Text style={[styles.statusValue, { color: libraryStatus.pako ? theme.colors.success : theme.colors.error }]}>
@@ -120,16 +114,8 @@ export default function TGSSimpleTestScreen() {
             <Text style={[styles.statusLabel, { color: theme.colors.textSecondary }]}>
               lottie-web:
             </Text>
-            <Text style={[styles.statusValue, { color: libraryStatus.lottieWeb ? theme.colors.success : theme.colors.error }]}>
-              {libraryStatus.lottieWeb ? '✓ Available' : '✗ Not Available'}
-            </Text>
-          </View>
-          <View style={styles.statusRow}>
-            <Text style={[styles.statusLabel, { color: theme.colors.textSecondary }]}>
-              lottie-react-native:
-            </Text>
-            <Text style={[styles.statusValue, { color: libraryStatus.lottieReactNative ? theme.colors.success : theme.colors.error }]}>
-              {libraryStatus.lottieReactNative ? '✓ Available' : '✗ Not Available'}
+            <Text style={[styles.statusValue, { color: libraryStatus.lottie ? theme.colors.success : theme.colors.error }]}>
+              {libraryStatus.lottie ? '✓ Available' : '✗ Not Available'}
             </Text>
           </View>
         </View>

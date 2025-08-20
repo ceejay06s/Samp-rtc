@@ -3,18 +3,15 @@
  */
 
 export interface LibraryStatus {
-  tgs2json: boolean;
   pako: boolean;
-  lottieWeb: boolean;
-  lottieReactNative: boolean;
+  lottie: boolean;
+  // Note: tgs2json has been removed due to compatibility issues
 }
 
 export const checkLibraryAvailability = (): LibraryStatus => {
   const status: LibraryStatus = {
-    tgs2json: false,
     pako: false,
-    lottieWeb: false,
-    lottieReactNative: false,
+    lottie: false,
   };
 
   try {
@@ -23,15 +20,6 @@ export const checkLibraryAvailability = (): LibraryStatus => {
       // Node.js environment
       console.log('🔍 Library checker: Node.js environment detected');
       
-      // Check tgs2json
-      try {
-        const tgs2json = require('tgs2json');
-        status.tgs2json = !!(tgs2json && typeof tgs2json === 'function');
-        console.log('✅ tgs2json available in Node.js');
-      } catch (e) {
-        console.log('❌ tgs2json not available in Node.js:', e);
-      }
-
       // Check pako
       try {
         const pako = require('pako');
@@ -44,7 +32,7 @@ export const checkLibraryAvailability = (): LibraryStatus => {
       // Check lottie-web (for web platform)
       try {
         const lottieWeb = require('lottie-web');
-        status.lottieWeb = !!(lottieWeb && typeof lottieWeb.loadAnimation === 'function');
+        status.lottie = !!(lottieWeb && typeof lottieWeb.loadAnimation === 'function');
         console.log('✅ lottie-web available in Node.js');
       } catch (e) {
         console.log('❌ lottie-web not available in Node.js:', e);
@@ -53,7 +41,7 @@ export const checkLibraryAvailability = (): LibraryStatus => {
       // Check lottie-react-native (for mobile platform)
       try {
         const lottieReactNative = require('lottie-react-native');
-        status.lottieReactNative = !!(lottieReactNative && lottieReactNative.default);
+        status.lottie = !!(lottieReactNative && lottieReactNative.default);
         console.log('✅ lottie-react-native available in Node.js');
       } catch (e) {
         console.log('❌ lottie-react-native not available in Node.js:', e);
@@ -63,18 +51,13 @@ export const checkLibraryAvailability = (): LibraryStatus => {
       console.log('🔍 Library checker: Browser environment detected');
       
       // Check if libraries are available globally
-      if ((window as any).tgs2json) {
-        status.tgs2json = !!(window as any).tgs2json && typeof (window as any).tgs2json === 'function';
-        console.log('✅ tgs2json available globally in browser');
-      }
-      
       if ((window as any).pako) {
         status.pako = !!((window as any).pako && (window as any).pako.inflate);
         console.log('✅ pako available globally in browser');
       }
       
       if ((window as any).lottie) {
-        status.lottieWeb = !!((window as any).lottie && typeof (window as any).lottie.loadAnimation === 'function');
+        status.lottie = !!((window as any).lottie && typeof (window as any).lottie.loadAnimation === 'function');
         console.log('✅ lottie available globally in browser');
       }
       
@@ -91,7 +74,7 @@ export const checkLibraryAvailability = (): LibraryStatus => {
         }
         
         if (typeof (window as any).lottie !== 'undefined') {
-          status.lottieWeb = true;
+          status.lottie = true;
           console.log('✅ lottie available via global variable');
         }
         
@@ -107,16 +90,7 @@ export const checkLibraryAvailability = (): LibraryStatus => {
       console.log('🔍 Library checker: React Native environment detected');
       
       try {
-        // Check tgs2json
-        const tgs2json = require('tgs2json');
-        status.tgs2json = !!(tgs2json && typeof tgs2json === 'function');
-        console.log('✅ tgs2json available in React Native');
-      } catch (e) {
-        console.log('❌ tgs2json not available in React Native:', e);
-      }
-
-      // Check pako
-      try {
+        // Check pako
         const pako = require('pako');
         status.pako = !!(pako && pako.inflate && typeof pako.inflate === 'function');
         console.log('✅ pako available in React Native');
@@ -127,7 +101,7 @@ export const checkLibraryAvailability = (): LibraryStatus => {
       // Check lottie-react-native
       try {
         const lottieReactNative = require('lottie-react-native');
-        status.lottieReactNative = !!(lottieReactNative && lottieReactNative.default);
+        status.lottie = !!(lottieReactNative && lottieReactNative.default);
         console.log('✅ lottie-react-native available in React Native');
       } catch (e) {
         console.log('❌ lottie-react-native not available in React Native:', e);
@@ -143,11 +117,9 @@ export const checkLibraryAvailability = (): LibraryStatus => {
 export const getRecommendedFallback = (): string => {
   const status = checkLibraryAvailability();
   
-  if (status.tgs2json) {
-    return 'tgs2json';
-  } else if (status.pako) {
+  if (status.pako) {
     return 'pako';
-  } else if (status.lottieWeb || status.lottieReactNative) {
+  } else if (status.lottie) {
     return 'direct';
   } else {
     return 'fallback';

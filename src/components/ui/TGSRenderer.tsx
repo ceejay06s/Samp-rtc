@@ -61,9 +61,25 @@ export const TGSRenderer: React.FC<TGSRendererProps> = ({
           console.log('🎭 TGSRenderer: TGS file fetched, size:', uint8Array.length, 'bytes');
           
           // Use tgs2json to convert TGS to Lottie JSON
-          console.log('🎭 TGSRenderer: Converting TGS to Lottie JSON...');
-          const { tgs2json } = require('tgs2json');
-          const lottieData = await tgs2json(uint8Array);
+          let lottieData;
+          try {
+            // Note: tgs2json package has been removed due to compatibility issues
+            console.log('🎭 TGSRenderer: tgs2json package removed, trying pako decompression...');
+            throw new Error('tgs2json package not available');
+          } catch (tgs2jsonError) {
+            console.log('🎭 TGSRenderer: tgs2json failed, trying pako decompression...');
+            
+            // Fallback: Use pako to decompress TGS and convert to Lottie JSON
+            try {
+              const pako = require('pako');
+              const decompressedData = pako.inflate(uint8Array, { to: 'string' });
+              lottieData = JSON.parse(decompressedData);
+              console.log('🎭 TGSRenderer: pako decompression successful');
+            } catch (pakoError) {
+              console.log('🎭 TGSRenderer: pako decompression failed:', pakoError);
+              throw new Error('TGS conversion failed - no compatible libraries available');
+            }
+          }
           console.log('🎭 TGSRenderer: TGS conversion successful, Lottie data:', lottieData);
           setAnimationData({ type: 'lottie', data: lottieData });
         } catch (conversionError) {

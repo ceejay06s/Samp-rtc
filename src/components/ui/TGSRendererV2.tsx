@@ -76,95 +76,22 @@ export const TGSRendererV2: React.FC<TGSRendererV2Props> = ({
           let lottieData = null;
           
           // Approach 1: Try using tgs2json library first (Node.js/React Native only)
-          try {
-            console.log('🎭 TGSRendererV2: Trying tgs2json library...');
-            // tgs2json is only available in Node.js/React Native environments
-            if (typeof require !== 'undefined' && typeof window === 'undefined') {
-              try {
-                const tgs2json = require('tgs2json');
-                if (tgs2json && typeof tgs2json === 'function') {
-                  const jsonString = tgs2json(uint8Array);
-                  lottieData = JSON.parse(jsonString);
-                  console.log('🎭 TGSRendererV2: tgs2json conversion successful');
-                } else {
-                  throw new Error('tgs2json is not a function');
-                }
-              } catch (requireError) {
-                console.log('🎭 TGSRendererV2: tgs2json require failed:', requireError);
-                throw new Error('tgs2json library not available');
-              }
-            } else {
-              console.log('🎭 TGSRendererV2: tgs2json not available in browser environment, skipping...');
-              throw new Error('tgs2json not available in browser environment');
-            }
-          } catch (tgs2jsonError) {
-            console.log('🎭 TGSRendererV2: tgs2json failed, trying pako decompression...');
-            
-            // Approach 2: Use pako to decompress TGS and convert to Lottie JSON
+          if (typeof require !== 'undefined' && typeof window === 'undefined') {
             try {
-              console.log('🎭 TGSRendererV2: Trying pako decompression...');
-              // Try to get pako from different sources
-              let pako;
-              try {
-                if (typeof require !== 'undefined' && typeof window === 'undefined') {
-                  // Node.js/React Native environment
-                  pako = require('pako');
-                } else if (typeof window !== 'undefined' && (window as any).pako) {
-                  // Browser with global pako
-                  pako = (window as any).pako;
-                } else if (typeof window !== 'undefined') {
-                  // Browser environment - try to use bundled pako if available
-                  console.log('🎭 TGSRendererV2: Browser environment - pako might be bundled');
-                  // In browsers, pako might be available through the bundler
-                  // We'll try to use it directly if it's available
-                  throw new Error('pako not available in browser environment');
-                } else {
-                  throw new Error('pako not available in this environment');
-                }
-                
-                if (pako && pako.inflate) {
-                  console.log('🎭 TGSRendererV2: pako imported successfully');
-                  
-                  // TGS files are gzipped Lottie JSON, so we need to decompress them
-                  console.log('🎭 TGSRendererV2: Decompressing TGS data...');
-                  const decompressedData = pako.inflate(uint8Array, { to: 'string' });
-                  console.log('🎭 TGSRendererV2: Decompression successful, data length:', decompressedData.length);
-                  
-                  // Parse the decompressed JSON data
-                  console.log('🎭 TGSRendererV2: Parsing decompressed JSON...');
-                  lottieData = JSON.parse(decompressedData);
-                  console.log('🎭 TGSRendererV2: pako decompression successful');
-                } else {
-                  throw new Error('pako.inflate not available');
-                }
-              } catch (importError) {
-                console.log('🎭 TGSRendererV2: pako import failed:', importError);
-                throw new Error('pako library not available');
-              }
-            } catch (pakoError) {
-              console.log('🎭 TGSRendererV2: pako decompression failed, trying raw TGS...');
-              
-              // Approach 3: Try to use the TGS file directly with lottie-web
-              try {
-                // Some TGS files can be loaded directly by lottie-web
-                lottieData = { type: 'tgs', uri: url };
-                console.log('🎭 TGSRendererV2: Using TGS file directly');
-              } catch (directError) {
-                throw new Error('All TGS conversion methods failed');
-              }
+              console.log('🎭 TGSRendererV2: Trying tgs2json library...');
+              // tgs2json is only available in Node.js/React Native environments
+              // Note: tgs2json package has been removed due to compatibility issues
+              console.log('🎭 TGSRendererV2: tgs2json package removed, skipping...');
+              throw new Error('tgs2json package not available');
+            } catch (requireError) {
+              console.log('🎭 TGSRendererV2: tgs2json require failed:', requireError);
+              throw new Error('tgs2json library not available');
             }
+          } else {
+            console.log('🎭 TGSRendererV2: tgs2json not available in browser environment, skipping...');
+            throw new Error('tgs2json not available in browser environment');
           }
           
-          // Validate that it looks like Lottie data
-          if (lottieData && (
-            (typeof lottieData === 'object' && lottieData.v) || // Standard Lottie format
-            (lottieData.type === 'tgs') // Direct TGS format
-          )) {
-            console.log('🎭 TGSRendererV2: Valid animation data detected');
-            setAnimationData(lottieData);
-          } else {
-            throw new Error('Converted data does not appear to be valid animation data');
-          }
         } catch (conversionError) {
           console.warn('🎭 TGSRendererV2: TGS to JSON conversion failed, trying fallback:', conversionError);
           setUseFallback(true);
@@ -183,65 +110,19 @@ export const TGSRendererV2: React.FC<TGSRendererV2Props> = ({
           const uint8Array = new Uint8Array(arrayBuffer);
           
           // Try tgs2json first on mobile
-          let lottieData = null;
-          try {
-            console.log('🎭 TGSRendererV2: Mobile - trying tgs2json...');
-            let tgs2json;
+          if (typeof require !== 'undefined' && typeof window === 'undefined') {
             try {
-              if (typeof require !== 'undefined') {
-                tgs2json = require('tgs2json');
-              } else if (typeof window !== 'undefined' && (window as any).tgs2json) {
-                tgs2json = (window as any).tgs2json;
-              } else {
-                throw new Error('tgs2json not available in this environment');
-              }
-              
-              if (tgs2json && typeof tgs2json === 'function') {
-                const jsonString = tgs2json(uint8Array);
-                lottieData = JSON.parse(jsonString);
-                console.log('🎭 TGSRendererV2: Mobile tgs2json conversion successful');
-              } else {
-                throw new Error('tgs2json is not a function');
-              }
+              console.log('🎭 TGSRendererV2: Mobile - trying tgs2json...');
+              // Note: tgs2json package has been removed due to compatibility issues
+              console.log('🎭 TGSRendererV2: Mobile - tgs2json package removed, skipping...');
+              throw new Error('tgs2json package not available');
             } catch (importError) {
               console.log('🎭 TGSRendererV2: Mobile tgs2json import failed:', importError);
               throw new Error('tgs2json library not available');
             }
-          } catch (tgs2jsonError) {
-            console.log('🎭 TGSRendererV2: Mobile tgs2json failed, trying pako...');
-            // Fallback to pako on mobile
-            try {
-              console.log('🎭 TGSRendererV2: Mobile - trying pako...');
-              let pako;
-              try {
-                if (typeof require !== 'undefined') {
-                  pako = require('pako');
-                } else if (typeof window !== 'undefined' && (window as any).pako) {
-                  pako = (window as any).pako;
-                } else {
-                  throw new Error('pako not available in this environment');
-                }
-                
-                if (pako && pako.inflate) {
-                  const decompressedData = pako.inflate(uint8Array, { to: 'string' });
-                  lottieData = JSON.parse(decompressedData);
-                  console.log('🎭 TGSRendererV2: Mobile pako decompression successful');
-                } else {
-                  throw new Error('pako.inflate not available');
-                }
-              } catch (importError) {
-                console.log('🎭 TGSRendererV2: Mobile pako import failed:', importError);
-                throw new Error('pako library not available');
-              }
-            } catch (pakoError) {
-              console.log('🎭 TGSRendererV2: Mobile pako failed, using direct TGS...');
-              // Last resort: try direct TGS loading
-              lottieData = { type: 'tgs', uri: url };
-              console.log('🎭 TGSRendererV2: Mobile using TGS file directly');
-            }
+          } else {
+            throw new Error('tgs2json not available in this environment');
           }
-          
-          setAnimationData(lottieData);
         } catch (mobileError) {
           console.warn('🎭 TGSRendererV2: Mobile TGS loading failed, using fallback:', mobileError);
           setUseFallback(true);
