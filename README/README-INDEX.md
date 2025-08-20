@@ -105,7 +105,28 @@ Welcome to the Samp-rtc documentation! This index organizes all the README files
 
 ## 🎨 **Features & Integrations**
 
-- **[README-EMOJI-GIF-SETUP.md](./README-EMOJI-GIF-SETUP.md)** - Emoji and GIF picker setup
+### **Media & Attachments**
+- **[README-ATTACHMENT-FEATURES.md](./README-ATTACHMENT-FEATURES.md)** - Attachment functionality
+- **[README-EMOJI-GIF-PICKER.md](./README-EMOJI-GIF-PICKER.md)** - Emoji and GIF picker
+- **[README-EMOJI-GIF-SETUP.md](./README-EMOJI-GIF-SETUP.md)** - Emoji and GIF setup
+- **[README-GIPHY-SETUP.md](./README-GIPHY-SETUP.md)** - Giphy integration setup
+- **[README-STICKER-PICKER.md](./README-STICKER-PICKER.md)** - Sticker picker implementation
+- **[README-TGS-RENDERING-FIX.md](./README-TGS-RENDERING-FIX.md)** - TGS sticker rendering fixes
+
+### **Notifications & Communication**
+- **[README-EXPO-NOTIFICATIONS.md](./README-EXPO-NOTIFICATIONS.md)** - Expo notifications implementation
+- **[README-EXPO-SUPABASE-NOTIFICATIONS.md](./README-EXPO-SUPABASE-NOTIFICATIONS.md)** - Expo + Supabase integration
+- **[README-NOTIFICATION-ASSETS.md](./README-NOTIFICATION-ASSETS.md)** - Notification assets setup
+- **[README-NOTIFICATION-USAGE-EXAMPLES.md](./README-NOTIFICATION-USAGE-EXAMPLES.md)** - Practical usage examples
+- **[README-VOICE-MESSAGE-RLS-FIX.md](./README-VOICE-MESSAGE-RLS-FIX.md)** - Voice message RLS fixes
+
+### **Image & Media Processing**
+- **[README-IMAGE-CROPPER-INTEGRATION.md](./README-IMAGE-CROPPER-INTEGRATION.md)** - Image cropper integration
+- **[README-CROSS-PLATFORM-CROPPING.md](./README-CROSS-PLATFORM-CROPPING.md)** - Cross-platform image cropping
+- **[README-BROKEN-IMAGE-HANDLING.md](./README-BROKEN-IMAGE-HANDLING.md)** - Broken image handling
+- **[README-ENHANCED-PHOTO-UPLOAD.md](./README-ENHANCED-PHOTO-UPLOAD.md)** - Enhanced photo upload features
+
+### **General Fixes & Improvements**
 - **[README-ERROR-FIXES.md](./README-ERROR-FIXES.md)** - General error fixes
 - **[README-FINAL-FIX.md](./README-FINAL-FIX.md)** - Final fixes and improvements
 

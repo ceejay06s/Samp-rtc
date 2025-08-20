@@ -55,10 +55,14 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>The app accesses your camera to let you take photos for your profile.</string>
+    <key>NSLocationAlwaysAndWhenInUsePermission</key>
+    <string>This app needs access to your location to find nearby places and improve your dating experience.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>This app needs access to your location to find nearby places and improve your dating experience.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your location</string>
+    <key>NSLocationWhenInUsePermission</key>
+    <string>This app needs access to your location to find nearby places and improve your dating experience.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>This app needs access to your location to find nearby places and improve your dating experience.</string>
     <key>NSMicrophoneUsageDescription</key>

@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -518,6 +519,171 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   
   const { user } = useAuth();
   useAudioManager();
+
+  // Notification setup
+  useEffect(() => {
+    const setupNotifications = async () => {
+      if (!isWeb) {
+        // Request notification permissions
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        
+        if (finalStatus !== 'granted') {
+          console.log('Notification permissions not granted');
+          return;
+        }
+
+        // Configure notification behavior
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        });
+
+        // Get push token for remote notifications (optional)
+        try {
+          const token = await Notifications.getExpoPushTokenAsync();
+          console.log('Push token:', token);
+        } catch (error) {
+          console.log('Error getting push token:', error);
+        }
+      }
+    };
+
+    setupNotifications();
+  }, [isWeb]);
+
+  // Set up notification response listener
+  useEffect(() => {
+    if (!isWeb) {
+      const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+        const data = response.notification.request.content.data;
+        
+        if (data.type === 'new_message' && data.conversationId === conversationId) {
+          // User tapped on a new message notification
+          console.log('User tapped on new message notification');
+          // You can add navigation logic here if needed
+        } else if (data.type === 'typing' && data.conversationId === conversationId) {
+          // User tapped on typing notification
+          console.log('User tapped on typing notification');
+        } else if (data.type === 'status_change' && data.conversationId === conversationId) {
+          // User tapped on status change notification
+          console.log('User tapped on status change notification');
+        }
+      });
+
+      return () => subscription.remove();
+    }
+  }, [conversationId, isWeb]);
+
+  // Function to show local notifications
+  const showNotification = async (title: string, body: string, data?: any) => {
+    if (isWeb) return; // Skip notifications on web
+    
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data: data || {},
+          sound: true,
+        },
+        trigger: null, // Show immediately
+      });
+    } catch (error) {
+      console.error('Error showing notification:', error);
+    }
+  };
+
+  // Function to show typing notification
+  const showTypingNotification = async (userName: string) => {
+    if (isWeb) return;
+    
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `${userName} is typing...`,
+          body: 'Tap to open chat',
+          data: { type: 'typing', conversationId },
+          sound: false, // No sound for typing
+        },
+        trigger: null,
+      });
+    } catch (error) {
+      console.error('Error showing typing notification:', error);
+    }
+  };
+
+  // Function to show new message notification
+  const showNewMessageNotification = async (message: any, senderName: string) => {
+    if (isWeb) return;
+    
+    try {
+      let body = 'New message';
+      if (message.content) {
+        body = message.content.length > 50 
+          ? `${message.content.substring(0, 50)}...` 
+          : message.content;
+      } else if (message.message_type === MessageType.PHOTO) {
+        body = '📷 Photo';
+      } else if (message.message_type === MessageType.VOICE) {
+        body = '🎤 Voice message';
+      } else if (message.message_type === MessageType.GIF) {
+        body = '🎬 GIF';
+      } else if (message.message_type === MessageType.STICKER) {
+        body = '😊 Sticker';
+      }
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Message from ${senderName}`,
+          body,
+          data: { 
+            type: 'new_message', 
+            conversationId,
+            messageId: message.id,
+            senderId: message.sender_id
+          },
+          sound: true,
+        },
+        trigger: null,
+      });
+    } catch (error) {
+      console.error('Error showing new message notification:', error);
+    }
+  };
+
+  // Function to show online status notification
+  const showOnlineStatusNotification = async (userName: string, isOnline: boolean) => {
+    if (isWeb) return;
+    
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: isOnline ? `${userName} is online` : `${userName} went offline`,
+          body: isOnline ? 'Tap to start chatting' : 'They\'ll see your message when they\'re back',
+          data: { 
+            type: 'status_change', 
+            conversationId,
+            isOnline 
+          },
+          sound: false,
+        },
+        trigger: null,
+      });
+    } catch (error) {
+      console.error('Error showing status notification:', error);
+    }
+  };
   
   // Cross-platform alert helper
   const showAlert = (title: string, message: string, buttons?: any[]) => {
@@ -589,6 +755,14 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
         // For mobile, we'll need to implement clipboard functionality
         showAlert('Copied!', 'Message copied to clipboard');
       }
+      
+      // Show success notification for copying
+      if (!isWeb) {
+        showNotification(
+          'Copied!',
+          '📋 Message copied to clipboard'
+        );
+      }
     }
     handleMessageOptionsClose();
   };
@@ -617,8 +791,15 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
           if (success) {
             console.log('✅ Message deleted successfully');
             
-            // Show success feedback
-            window.alert('Message deleted successfully');
+            // Show success notification for message deletion
+            if (!isWeb) {
+              showNotification(
+                'Message Deleted',
+                '🗑️ Message deleted successfully!'
+              );
+            }
+            
+            handleMessageOptionsClose();
           } else {
             throw new Error('Delete operation failed');
           }
@@ -656,8 +837,15 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
                   if (success) {
                     console.log('✅ Message deleted successfully');
                     
-                    // Show success feedback
-                    Alert.alert('Success', 'Message deleted successfully');
+                    // Show success notification for message deletion
+                    if (!isWeb) {
+                      showNotification(
+                        'Message Deleted',
+                        '🗑️ Message deleted successfully!'
+                      );
+                    }
+                    
+                    handleMessageOptionsClose();
                   } else {
                     throw new Error('Delete operation failed');
                   }
@@ -785,6 +973,55 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
     return () => clearTimeout(timeoutId);
   }, [messageText, isTyping, sendTypingIndicator]);
 
+  // Monitor for new messages and show notifications
+  useEffect(() => {
+    if (messages.length > 0 && !isWeb) {
+      const lastMessage = messages[messages.length - 1];
+      
+      // Only show notification if it's not from the current user and it's a recent message
+      if (lastMessage.sender_id !== user?.id) {
+        const messageTime = new Date(lastMessage.created_at).getTime();
+        const now = Date.now();
+        const timeDiff = now - messageTime;
+        
+        // Show notification for messages received in the last 30 seconds
+        if (timeDiff < 30000) {
+          showNewMessageNotification(lastMessage, otherUserName);
+        }
+      }
+    }
+  }, [messages, user?.id, otherUserName, isWeb]);
+
+  // Monitor typing indicators and show notifications
+  useEffect(() => {
+    if (typingUsers.length > 0 && !isWeb) {
+      const typingUserId = typingUsers[0]; // Get the first typing user ID
+      if (typingUserId !== user?.id) {
+        showTypingNotification(otherUserName);
+      }
+    }
+  }, [typingUsers, user?.id, otherUserName, isWeb]);
+
+  // Monitor online status changes and show notifications
+  useEffect(() => {
+    if (!isWeb && onlineUsers.length > 0) {
+      const otherUserId = onlineUsers.find(userId => userId !== user?.id);
+      if (otherUserId) {
+        showOnlineStatusNotification(otherUserName, true);
+      }
+    }
+  }, [onlineUsers, user?.id, otherUserName, isWeb]);
+
+  // Monitor offline status changes and show notifications
+  useEffect(() => {
+    if (!isWeb && offlineUsers.length > 0) {
+      const otherUserId = offlineUsers.find(userId => userId !== user?.id);
+      if (otherUserId) {
+        showOnlineStatusNotification(otherUserName, false);
+      }
+    }
+  }, [offlineUsers, user?.id, otherUserName, isWeb]);
+
   const handleTextChange = (text: string) => {
     setMessageText(text);
     if (text.length > 0 && !isTyping) {
@@ -824,10 +1061,26 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
               messageType = MessageType.TEXT;
           }
           await sendMessage(media.url, messageType, { replyTo: currentRepliedMessage?.id });
+          
+          // Show success notification for media message
+          if (!isWeb) {
+            showNotification(
+              'Message Sent',
+              `${media.type === 'image' ? '📷 Photo' : media.type === 'gif' ? '🎬 GIF' : '😊 Sticker'} sent successfully!`
+            );
+          }
         }
       } else {
         // Send text message with reply data
         await sendMessage(textToSend, MessageType.TEXT, { replyTo: currentRepliedMessage?.id });
+        
+        // Show success notification for text message
+        if (!isWeb) {
+          showNotification(
+            'Message Sent',
+            '💬 Text message sent successfully!'
+          );
+        }
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to send message');
@@ -927,6 +1180,14 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
   const handleReconnect = async () => {
     try {
       await reconnect();
+      
+      // Show success notification for reconnection
+      if (!isWeb) {
+        showNotification(
+          'Reconnected',
+          '✅ Successfully reconnected to chat service!'
+        );
+      }
     } catch (err) {
       Alert.alert('Error', 'Failed to reconnect');
     }
@@ -934,7 +1195,20 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
 
   const handleSearch = async (query: string) => {
     if (query.trim()) {
-      await searchMessages(query);
+      const results = await searchMessages(query);
+      
+      // Show notification for search results
+      if (!isWeb && results.length > 0) {
+        showNotification(
+          'Search Results',
+          `🔍 Found ${results.length} message${results.length > 1 ? 's' : ''} for "${query}"`
+        );
+      } else if (!isWeb && results.length === 0) {
+        showNotification(
+          'No Results',
+          `🔍 No messages found for "${query}"`
+        );
+      }
     }
   };
 
@@ -1042,7 +1316,16 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
         await sendImageMessage(imageData, '', { replyTo: repliedMessage?.id });
         
         setShowAttachmentMenu(false);
-        Alert.alert('Success', 'Image sent successfully!');
+        
+        // Show success notification for image message
+        if (!isWeb) {
+          showNotification(
+            'Image Sent',
+            '📷 Image sent successfully!'
+          );
+        } else {
+          Alert.alert('Success', 'Image sent successfully!');
+        }
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -1102,6 +1385,14 @@ export const EnhancedRealtimeChat: React.FC<EnhancedRealtimeChatProps> = ({
       if (uri) {
         // Send voice message using the dedicated voice message method
         await sendVoiceMessage(uri, recordingDuration);
+        
+        // Show success notification for voice message
+        if (!isWeb) {
+          showNotification(
+            'Voice Message Sent',
+            '🎤 Voice message sent successfully!'
+          );
+        }
       }
     } catch (error) {
       console.error('Error stopping recording:', error);

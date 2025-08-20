@@ -85,6 +85,7 @@ EXPO_PUBLIC_GIPHY_API_KEY=your_giphy_api_key
 - ✅ **Responsive Design** - Adaptive layouts for all screen sizes
 - ✅ **Offline Support** - Basic functionality without internet
 - ✅ **Push Notifications** - Real-time alerts for matches and messages
+- ✅ **Expo Notifications** - Local notifications for chat activities and user feedback
 - ✅ **Analytics** - User behavior tracking and insights
 
 ## 🏗️ **Architecture**

@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yourcompany.samp-rtc",
+      "deploymentTarget": "13.0",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": false,
         "UIStatusBarHidden": false,
@@ -18,8 +19,8 @@
         "UIStatusBarAnimation": "UIStatusBarAnimationSlide",
         "NSCameraUsageDescription": "This app needs access to camera to take profile photos.",
         "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select profile photos.",
-        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to find nearby places and improve your dating experience.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to find nearby places and improve your dating experience.",
+        "NSLocationWhenInUsePermission": "This app needs access to your location to find nearby places and improve your dating experience.",
+        "NSLocationAlwaysAndWhenInUsePermission": "This app needs access to your location to find nearby places and improve your dating experience.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
