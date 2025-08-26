@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../lib/supabase';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { RangeSlider } from '../src/components/ui/RangeSlider';
@@ -9,7 +10,6 @@ import { SingleSlider } from '../src/components/ui/Slider';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
 import { AuthService, ProfileUpdateData } from '../src/services/auth';
-import { formatLocationForDisplay } from '../src/utils/location';
 import { getResponsiveFontSize, getResponsiveSpacing } from '../src/utils/responsive';
 import { useTheme } from '../src/utils/themes';
 
@@ -59,8 +59,8 @@ export default function PreferencesScreen() {
 
   // Load current preferences from user profile
   const loadPreferences = useCallback(async () => {
-    if (!currentProfile) {
-      setError('Please complete your profile to access preferences');
+    if (!user?.id) {
+      setError('Please log in to access preferences');
       setLoading(false);
       return;
     }
@@ -68,44 +68,79 @@ export default function PreferencesScreen() {
     try {
       setLoading(true);
       setError(null);
+      console.log('🔍 Loading preferences for user:', user.id);
 
-      // Set preferences from current profile - age_min and age_max from Supabase
+      // Fetch profile directly from Supabase
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('❌ Error fetching profile:', profileError);
+        throw profileError;
+      }
+
+      if (!profileData) {
+        setError('Please complete your profile to access preferences');
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Profile data loaded:', profileData);
+
+      // Set preferences from profile data - age_min and age_max from Supabase
       setAgeRange({
-        min: currentProfile.min_age || AGE_MIN_RANGE,  // Default min_range from database constraint
-        max: currentProfile.max_age || AGE_MAX_RANGE   // Default max_range from database constraint
+        min: profileData.min_age || AGE_MIN_RANGE,  // Default min_range from database constraint
+        max: profileData.max_age || AGE_MAX_RANGE   // Default max_range from database constraint
       });
-      setMaxDistance(currentProfile.max_distance || 25);
+      setMaxDistance(profileData.max_distance || 25);
       
       // Set gender preferences
-      const lookingFor = currentProfile.looking_for || [];
+      const lookingFor = profileData.looking_for || [];
       setShowMen(lookingFor.includes('male'));
       setShowWomen(lookingFor.includes('female'));
       setShowNonBinary(lookingFor.includes('non-binary'));
 
-      // Note: These would come from a separate preferences table in a real app
-      // For now, we'll use defaults
-      setShowOnlineOnly(false);
-      setShowVerifiedOnly(false);
-      setNotifications(true);
-      setEmailNotifications(true);
-      // locationSharing is now managed by AuthContext
+      // Try to load additional preferences from user_preferences table
+      const { data: preferencesData } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (preferencesData) {
+        console.log('✅ Additional preferences loaded:', preferencesData);
+        setShowOnlineOnly(preferencesData.show_online_only || false);
+        setShowVerifiedOnly(preferencesData.show_verified_only || false);
+        setNotifications(preferencesData.push_notifications !== false); // default true
+        setEmailNotifications(preferencesData.email_notifications !== false); // default true
+      } else {
+        console.log('ℹ️ No additional preferences found, using defaults');
+        // Use defaults if no preferences table entry
+        setShowOnlineOnly(false);
+        setShowVerifiedOnly(false);
+        setNotifications(true);
+        setEmailNotifications(true);
+      }
 
     } catch (error) {
-      console.error('Failed to load preferences:', error);
+      console.error('❌ Failed to load preferences:', error);
       setError(error instanceof Error ? error.message : 'Failed to load preferences');
     } finally {
       setLoading(false);
     }
-  }, [currentProfile]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!authLoading && currentProfile) {
+    if (!authLoading && user) {
       loadPreferences();
-    } else if (!authLoading && !currentProfile) {
+    } else if (!authLoading && !user) {
       setLoading(false);
-      setError('Please complete your profile to access preferences');
+      setError('Please log in to access preferences');
     }
-  }, [authLoading, currentProfile]);
+  }, [authLoading, user, loadPreferences]);
 
   const getDesktopFontSize = (size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl') => {
     if (isDesktop) {
@@ -162,8 +197,8 @@ export default function PreferencesScreen() {
   };
 
   const handleSave = async () => {
-    if (!user || !currentProfile) {
-      Alert.alert('Error', 'Please complete your profile to save preferences');
+    if (!user) {
+      Alert.alert('Error', 'Please log in to save preferences');
       return;
     }
 
@@ -187,16 +222,73 @@ export default function PreferencesScreen() {
     try {
       setSaving(true);
       setError(null);
+      console.log('💾 Saving preferences for user:', user.id);
 
-      const updateData: ProfileUpdateData = {
-        min_age: ageRange.min,  // age_min to save to Supabase
-        max_age: ageRange.max,  // age_max to save to Supabase
+      // Update profile preferences in Supabase
+      const profileUpdateData = {
+        min_age: ageRange.min,
+        max_age: ageRange.max,
         max_distance: maxDistance,
         looking_for: selectedGenders,
+        updated_at: new Date().toISOString(),
       };
 
-      await AuthService.updateProfile(user.id, updateData);
-      await refreshProfile(); // Refresh profile in context
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update(profileUpdateData)
+        .eq('user_id', user.id);
+
+      if (profileError) {
+        console.error('❌ Error updating profile:', profileError);
+        throw profileError;
+      }
+
+      console.log('✅ Profile preferences updated');
+
+      // Save additional preferences to user_preferences table
+      const preferencesData = {
+        user_id: user.id,
+        show_online_only: showOnlineOnly,
+        show_verified_only: showVerifiedOnly,
+        push_notifications: notifications,
+        email_notifications: emailNotifications,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: preferencesError } = await supabase
+        .from('user_preferences')
+        .upsert([preferencesData])
+        .select();
+
+      if (preferencesError) {
+        console.error('❌ Error updating additional preferences:', preferencesError);
+        // Don't throw error for this - profile preferences are more important
+        console.log('⚠️ Continuing with profile preferences only');
+      } else {
+        console.log('✅ Additional preferences updated');
+      }
+
+      // Also try AuthService for backwards compatibility
+      try {
+        const updateData: ProfileUpdateData = {
+          min_age: ageRange.min,
+          max_age: ageRange.max,
+          max_distance: maxDistance,
+          looking_for: selectedGenders,
+        };
+        await AuthService.updateProfile(user.id, updateData);
+        console.log('✅ Profile updated via AuthService');
+      } catch (authServiceError) {
+        console.log('ℹ️ AuthService update failed, but direct Supabase update succeeded');
+      }
+
+      // Refresh profile in context
+      try {
+        await refreshProfile();
+        console.log('✅ Profile context refreshed');
+      } catch (contextError) {
+        console.log('ℹ️ Context refresh failed, but preferences saved successfully');
+      }
 
       Alert.alert(
         'Preferences Saved',
@@ -209,7 +301,7 @@ export default function PreferencesScreen() {
         ]
       );
     } catch (error) {
-      console.error('Failed to save preferences:', error);
+      console.error('❌ Failed to save preferences:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to save preferences';
       setError(errorMessage);
       Alert.alert('Error', errorMessage);
@@ -723,9 +815,9 @@ export default function PreferencesScreen() {
                 <Text style={[styles.locationStatusSubtitle, { color: theme.colors.textSecondary }]}>
                   Your location updates automatically when you open the app
                 </Text>
-                {currentProfile?.latitude && currentProfile?.longitude && (
+                {currentProfile && (
                   <Text style={[styles.currentLocationText, { color: theme.colors.textSecondary }]}>
-                    📍 Current: {formatLocationForDisplay(currentProfile.location)}
+                    📍 Current: {formatLocationDisplay(currentProfile.location, currentProfile.latitude, currentProfile.longitude)}
                   </Text>
                 )}
               </View>
@@ -733,9 +825,16 @@ export default function PreferencesScreen() {
             
             <TouchableOpacity
               style={[styles.manualUpdateButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => {
-                manualLocationUpdate();
-                Alert.alert('Location Update', 'Updating your location...');
+              onPress={async () => {
+                try {
+                  Alert.alert('Location Update', 'Updating your location...');
+                  await manualLocationUpdate();
+                  // Refresh preferences to show updated location
+                  setTimeout(() => loadPreferences(), 2000);
+                } catch (error) {
+                  console.error('Failed to update location:', error);
+                  Alert.alert('Error', 'Failed to update location. Please try again.');
+                }
               }}
             >
               <Text style={[styles.manualUpdateButtonText, { color: '#fff' }]}>

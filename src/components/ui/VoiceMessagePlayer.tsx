@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AudioManager from '../../services/audioManager';
+import { APP_CONFIG } from '../../utils/appConfig';
 import { useTheme } from '../../utils/themes';
 
 interface VoiceMessagePlayerProps {
@@ -104,13 +105,17 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
         onPlay?.();
         
         // Start position update interval
-        positionUpdateInterval.current = setInterval(() => {
-          sound.getStatusAsync().then((status: any) => {
-            if (status.isLoaded && status.isPlaying && !isSeeking) {
-              setCurrentPosition(status.positionMillis / 1000);
-            }
-          });
-        }, 100);
+        if (!APP_CONFIG.DEVELOPMENT.DISABLE_VOICE_PLAYER_UPDATES) {
+          positionUpdateInterval.current = setInterval(() => {
+            sound.getStatusAsync().then((status: any) => {
+              if (status.isLoaded && status.isPlaying && !isSeeking) {
+                setCurrentPosition(status.positionMillis / 1000);
+              }
+            });
+          }, 500); // Increased from 100ms to 500ms to prevent excessive reloading
+        } else {
+          console.log('🔄 Voice player position updates disabled in development mode');
+        }
 
       }
     } catch (error) {

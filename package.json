@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:web": "bash scripts/build-web.sh",
+    "deploy:web": "bash scripts/build-web.sh"
   },
   "dependencies": {
     "@alextbogdanov/react-native-emoji-selector": "^0.2.1",
@@ -24,9 +26,10 @@
     "@types/markdown-it": "^14.1.2",
     "@types/twemoji": "^13.1.1",
     "@types/uuid": "^10.0.0",
+    "dotenv": "^17.2.1",
     "eas": "^0.1.0",
     "emoji-picker-react": "^4.13.2",
-    "expo": "^53.0.19",
+    "expo": "53.0.20",
     "expo-av": "^15.1.7",
     "expo-blur": "~14.1.5",
     "expo-constants": "~17.1.7",

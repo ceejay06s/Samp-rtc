@@ -5,17 +5,14 @@ import { useAuth } from '../lib/AuthContext';
 import { Button } from '../src/components/ui/Button';
 import { ListItem } from '../src/components/ui/ListItem';
 import { IconNames, MaterialIcon } from '../src/components/ui/MaterialIcon';
-import { NearestCity } from '../src/components/ui/NearestCity';
 import { usePlatform } from '../src/hooks/usePlatform';
 import { useViewport } from '../src/hooks/useViewport';
 import { DiscoveryFilters, MatchingService } from '../src/services/matching';
 import { Profile } from '../src/types';
 import { calculateAge } from '../src/utils/dateUtils';
-import { formatLocationForDisplay } from '../src/utils/location';
 import { useTheme } from '../src/utils/themes';
 
 const { width, height } = Dimensions.get('window');
-
 
 export default function DiscoverScreen() {
   const theme = useTheme();
@@ -23,7 +20,8 @@ export default function DiscoverScreen() {
   const { isAndroid, isIOS, isWeb } = usePlatform();
   const { width: viewportWidth } = useViewport();
   
-  const isMobile = isAndroid || isIOS;
+  // Simple mobile detection
+  const isMobile = isAndroid || isIOS || viewportWidth < 768;
   
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -52,9 +50,9 @@ export default function DiscoverScreen() {
     }
 
     return {
-      ageRange: [currentUserProfile.min_age, currentUserProfile.max_age] as [number, number],
-      maxDistance: currentUserProfile.max_distance,
-      gender: currentUserProfile.looking_for,
+      ageRange: [currentUserProfile.min_age || 18, currentUserProfile.max_age || 100] as [number, number],
+      maxDistance: currentUserProfile.max_distance || 50,
+      gender: currentUserProfile.looking_for || ['male', 'female'],
       interests: currentUserProfile.interests,
     };
   }, [currentUserProfile]);
@@ -72,7 +70,6 @@ export default function DiscoverScreen() {
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => !processingAction && !showDetailModal,
     onMoveShouldSetPanResponder: (_, gesture) => {
-      // Only activate pan responder if there's significant movement
       const moveThreshold = 10;
       return !processingAction && !showDetailModal && 
         (Math.abs(gesture.dx) > moveThreshold || Math.abs(gesture.dy) > moveThreshold);
@@ -121,14 +118,8 @@ export default function DiscoverScreen() {
             toValue: { x: 0, y: 0 },
             useNativeDriver: false,
           }),
-          Animated.timing(likeOpacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: false,
-          }),
-          Animated.timing(passOpacity, {
-            toValue: 0,
-            duration: 200,
+          Animated.spring(scale, {
+            toValue: 1,
             useNativeDriver: false,
           }),
         ]).start();
@@ -136,209 +127,200 @@ export default function DiscoverScreen() {
     },
   });
 
-  const animateSwipeOut = (direction: 'left' | 'right', callback: () => void) => {
-    const toValue = direction === 'right' ? width : -width;
+  // Load profiles
+  const loadProfiles = useCallback(async () => {
+    if (!user?.id) return;
     
-    Animated.parallel([
-      Animated.timing(position, {
-        toValue: { x: toValue, y: 0 },
-        duration: 250,
-        useNativeDriver: false,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: false,
-      }),
-    ]).start(() => {
-      callback();
-      resetPosition();
-    });
-  };
-
-  const loadProfiles = useCallback(async (isRefresh = false) => {
-    if (!user) {
-      setError('Please log in to start discovering');
-      setLoading(false);
-      return;
-    }
-
-    if (!currentUserProfile) {
-      setError('Please complete your profile to start discovering');
-      setLoading(false);
-      return;
-    }
-
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      setLoading(true);
       setError(null);
-
+      
       const filters = getDefaultFilters();
-      const discoveryProfiles = await MatchingService.getDiscoveryProfiles(
-        user.id,
-        filters,
-        20
-      );
-
-      setProfiles(discoveryProfiles);
-      setCurrentIndex(0);
-      setCurrentPhotoIndex(0);
-      resetPosition();
-      console.log('✅ Profiles loaded successfully:', profiles.length);
-      if (profiles.length > 0) {
-        console.log('📍 First profile location data:', {
-          location: profiles[0].location,
-          latitude: profiles[0].latitude,
-          longitude: profiles[0].longitude,
-          formattedLocation: profiles[0].location ? formatLocationForDisplay(profiles[0].location, 'city-state') : 'No location',
-          fullProfile: profiles[0]
-        });
+      const loadedProfiles = await MatchingService.getDiscoveryProfiles(user.id, filters, 20);
+      
+      if (loadedProfiles.length === 0) {
+        setError('No more profiles to show right now. Check back later!');
+      } else {
+        setProfiles(loadedProfiles);
+        setCurrentIndex(0);
+        setCurrentPhotoIndex(0);
       }
-    } catch (error) {
-      console.error('Failed to load profiles:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load profiles');
+    } catch (err) {
+      console.error('Error loading profiles:', err);
+      setError('Failed to load profiles. Please try again.');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [user, currentUserProfile, getDefaultFilters, resetPosition]);
+  }, [user?.id, getDefaultFilters]);
 
-  const onRefresh = useCallback(() => {
-    loadProfiles(true);
+  // Handle refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadProfiles();
+    setRefreshing(false);
   }, [loadProfiles]);
 
+  // Load profiles on mount
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && user?.id) {
       loadProfiles();
     }
-  }, [loadProfiles, authLoading]);
+  }, [authLoading, user?.id, loadProfiles]);
 
-  // Debug location parsing
-  useEffect(() => {
-    if (profiles.length > 0) {
-      const testLocation = profiles[0].location;
-      console.log('🧪 Testing location parsing:', {
-        original: testLocation,
-        parsed: testLocation ? require('../src/utils/location').parseLocation(testLocation) : null,
-        formatted: testLocation ? require('../src/utils/location').formatLocationForDisplay(testLocation, 'city-state') : null
-      });
-      
-      // Test with known good location
-      const testGoodLocation = 'San Francisco, CA';
-      console.log('🧪 Testing with known good location:', {
-        original: testGoodLocation,
-        parsed: require('../src/utils/location').parseLocation(testGoodLocation),
-        formatted: require('../src/utils/location').formatLocationForDisplay(testGoodLocation, 'city-state')
-      });
-    }
-  }, [profiles]);
+  const displayedProfile = profiles[currentIndex];
 
+  // Handle like action
   const handleLike = useCallback(async () => {
-    if (currentIndex >= profiles.length || processingAction) return;
+    if (!displayedProfile || processingAction) return;
     
+    setProcessingAction(true);
     try {
-      setProcessingAction(true);
-      const targetProfile = profiles[currentIndex];
-      
-      const result = await MatchingService.likeProfile({
-        targetUserId: targetProfile.user_id,
+      await MatchingService.likeProfile({
+        targetUserId: displayedProfile.user_id,
         isSuperLike: false,
       });
-      
-      if (result.isMatch) {
-        Alert.alert(
-          "It's a Match! 🎉",
-          `You and ${targetProfile.first_name} liked each other!`,
-          [
-            { text: 'Keep Swiping', style: 'default' },
-            { 
-              text: 'View Match', 
-              onPress: () => router.push('/matches') 
-            }
-          ]
-        );
+      // Move to next profile
+      if (currentIndex < profiles.length - 1) {
+        setCurrentIndex(currentIndex + 1);
+        setCurrentPhotoIndex(0);
+        resetPosition();
+      } else {
+        // No more profiles
+        setProfiles([]);
       }
-      
-      setCurrentIndex(prev => prev + 1);
-      setCurrentPhotoIndex(0);
     } catch (error) {
-      console.error('Failed to like profile:', error);
+      console.error('Error liking profile:', error);
       Alert.alert('Error', 'Failed to like profile. Please try again.');
     } finally {
       setProcessingAction(false);
     }
-  }, [currentIndex, profiles, processingAction]);
+  }, [displayedProfile, processingAction, currentIndex, profiles.length, resetPosition]);
 
-  const handlePass = useCallback(() => {
-    if (processingAction) return;
-    setCurrentIndex(prev => prev + 1);
-    setCurrentPhotoIndex(0);
-    setProcessingAction(false);
-  }, [processingAction]);
-
-  const handleSuperLike = useCallback(async () => {
-    if (currentIndex >= profiles.length || processingAction) return;
+  // Handle pass action
+  const handlePass = useCallback(async () => {
+    if (!displayedProfile || processingAction) return;
     
+    setProcessingAction(true);
     try {
-      setProcessingAction(true);
-      const targetProfile = profiles[currentIndex];
-      
-      const result = await MatchingService.likeProfile({
-        targetUserId: targetProfile.user_id,
-        isSuperLike: true,
-      });
-      
-      if (result.isMatch) {
-        Alert.alert(
-          "Super Match! ⭐",
-          `You super liked ${targetProfile.first_name} and they liked you back!`,
-          [
-            { text: 'Keep Swiping', style: 'default' },
-            { 
-              text: 'View Match', 
-              onPress: () => router.push('/matches') 
-            }
-          ]
-        );
+      // For pass, just move to next profile
+      if (currentIndex < profiles.length - 1) {
+        setCurrentIndex(currentIndex + 1);
+        setCurrentPhotoIndex(0);
+        resetPosition();
       } else {
-        Alert.alert(
-          "Super Like Sent! ⭐",
-          `${targetProfile.first_name} will be notified of your super like!`
-        );
+        // No more profiles
+        setProfiles([]);
       }
-      
-      setCurrentIndex(prev => prev + 1);
-      setCurrentPhotoIndex(0);
     } catch (error) {
-      console.error('Failed to super like profile:', error);
-      Alert.alert('Error', 'Failed to send super like. Please try again.');
+      console.error('Error passing profile:', error);
+      Alert.alert('Error', 'Failed to pass profile. Please try again.');
     } finally {
       setProcessingAction(false);
     }
-  }, [currentIndex, profiles, processingAction]);
+  }, [displayedProfile, processingAction, currentIndex, profiles.length, resetPosition]);
 
-  const handlePhotoNavigation = (direction: 'next' | 'prev') => {
-    if (!displayedProfile?.photos) return;
+  // Handle super like
+  const handleSuperLike = useCallback(async () => {
+    if (!displayedProfile || processingAction) return;
     
-    const newIndex = direction === 'next' 
-      ? (currentPhotoIndex + 1) % displayedProfile.photos.length
-      : (currentPhotoIndex - 1 + displayedProfile.photos.length) % displayedProfile.photos.length;
-    
-    setCurrentPhotoIndex(newIndex);
-  };
-
-  const handleProfileClick = () => {
-    console.log('Profile clicked:', displayedProfile?.user_id);
-    if (displayedProfile?.user_id) {
-              router.push(`/user-profile/${displayedProfile.user_id}`);
+    setProcessingAction(true);
+    try {
+      await MatchingService.likeProfile({
+        targetUserId: displayedProfile.user_id,
+        isSuperLike: true,
+      });
+      // Move to next profile
+      if (currentIndex < profiles.length - 1) {
+        setCurrentIndex(currentIndex + 1);
+        setCurrentPhotoIndex(0);
+        resetPosition();
+      } else {
+        // No more profiles
+        setProfiles([]);
+      }
+    } catch (error) {
+      console.error('Error super liking profile:', error);
+      Alert.alert('Error', 'Failed to super like profile. Please try again.');
+    } finally {
+      setProcessingAction(false);
     }
+  }, [displayedProfile, processingAction, currentIndex, profiles.length, resetPosition]);
+
+  // Animate swipe out
+  const animateSwipeOut = useCallback((direction: 'left' | 'right', callback: () => void) => {
+    const targetX = direction === 'right' ? width * 1.5 : -width * 1.5;
+    
+    Animated.parallel([
+      Animated.timing(position, {
+        toValue: { x: targetX, y: 0 },
+        duration: 300,
+        useNativeDriver: false,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+      Animated.timing(scale, {
+        toValue: 0.8,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      callback();
+    });
+  }, [position, opacity, scale, width]);
+
+  // Handle photo navigation
+  const handlePhotoNavigation = useCallback((direction: 'prev' | 'next') => {
+    if (!displayedProfile?.photos || displayedProfile.photos.length <= 1) return;
+    
+    if (direction === 'prev') {
+      setCurrentPhotoIndex(prev => 
+        prev === 0 ? displayedProfile.photos!.length - 1 : prev - 1
+      );
+    } else {
+      setCurrentPhotoIndex(prev => 
+        prev === displayedProfile.photos!.length - 1 ? 0 : prev + 1
+      );
+    }
+  }, [displayedProfile?.photos]);
+
+  // Handle profile click
+  const handleProfileClick = useCallback(() => {
+    setShowDetailModal(true);
+  }, []);
+
+  // Simple card dimensions for mobile
+  const getCardDimensions = () => {
+    if (isMobile) {
+      return {
+        cardWidth: width - 20, // 10px margin on each side
+        cardHeight: height * 0.7, // 70% of screen height
+        imageHeight: 0.7, // 70% of card height for image
+        padding: 16,
+        fontSize: {
+          name: 20,
+          bio: 14,
+          interest: 12,
+        },
+      };
+    }
+    
+    return {
+      cardWidth: Math.min(400, viewportWidth * 0.4),
+      cardHeight: Math.min(height * 0.68, height - 200),
+      imageHeight: 0.72,
+      padding: 16,
+      fontSize: {
+        name: 22,
+        bio: 14,
+        interest: 12,
+      },
+    };
   };
 
-  const displayedProfile = profiles[currentIndex];
+  const cardDimensions = getCardDimensions();
 
   // Auth loading state
   if (authLoading) {
@@ -350,10 +332,6 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
-            <NearestCity 
-              showLoading={false}
-              style={styles.locationDisplay}
-            />
           </View>
           <View style={{ width: 50 }} />
         </View>
@@ -378,10 +356,6 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
-            <NearestCity 
-              showLoading={false}
-              style={styles.locationDisplay}
-            />
           </View>
           <View style={{ width: 50 }} />
         </View>
@@ -406,10 +380,6 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
-            <NearestCity 
-              showLoading={false}
-              style={styles.locationDisplay}
-            />
           </View>
           <View style={{ width: 50 }} />
         </View>
@@ -442,10 +412,6 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
-            <NearestCity 
-              showLoading={false}
-              style={styles.locationDisplay}
-            />
           </View>
           <View style={{ width: 50 }} />
         </View>
@@ -482,7 +448,9 @@ export default function DiscoverScreen() {
     );
   }
 
-  const currentPhoto = displayedProfile.photos?.[currentPhotoIndex] || 'https://via.placeholder.com/400x600/FF6B9D/FFFFFF?text=No+Photo';
+  const currentPhoto = (displayedProfile.photos && displayedProfile.photos.length > 0) 
+    ? displayedProfile.photos[currentPhotoIndex] 
+    : 'https://via.placeholder.com/400x600/FF6B9D/FFFFFF?text=No+Photo';
   const hasMultiplePhotos = displayedProfile.photos && displayedProfile.photos.length > 1;
 
   return (
@@ -493,10 +461,6 @@ export default function DiscoverScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.title, { color: theme.colors.text }]}>Discover</Text>
-          <NearestCity 
-            showLoading={false}
-            style={styles.locationDisplay}
-          />
         </View>
         <TouchableOpacity onPress={() => router.push('/preferences')}>
           <MaterialIcon name={IconNames.settings} size={24} color={theme.colors.primary} />
@@ -528,155 +492,125 @@ export default function DiscoverScreen() {
             activeOpacity={0.9}
             delayPressIn={0}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={{ 
-              width: '100%',
-              // Add subtle visual feedback for mobile
-              ...(isMobile && {
-                shadowColor: theme.colors.primary,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              })
-            }}
+            style={{ width: '100%' }}
           >
-            <ListItem style={[styles.profileCard, { 
-            maxWidth: isMobile ? '100%' : Math.min(400, viewportWidth * 0.4),
-            alignSelf: 'center'
-            }]} padding="small">
-            <View style={styles.imageContainer}>
-              <Image
-                source={{ uri: currentPhoto }}
-                style={styles.profileImage}
-                resizeMode="cover"
-              />
+            <View style={[styles.profileCard, { 
+              width: cardDimensions.cardWidth,
+              height: cardDimensions.cardHeight,
+            }]}>
               
-              {/* Photo navigation dots */}
-              {hasMultiplePhotos && (
-                <View style={styles.photoIndicators}>
-                  {displayedProfile.photos!.map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.photoIndicator,
-                        {
-                          backgroundColor: index === currentPhotoIndex 
-                            ? 'white' 
-                            : 'rgba(255, 255, 255, 0.4)'
-                        }
-                      ]}
-                    />
-                  ))}
-                </View>
-              )}
-              
-              {/* Photo navigation areas */}
-              {hasMultiplePhotos && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.photoNavArea, styles.photoNavLeft]}
+              {/* Profile Image */}
+              <View style={[styles.imageContainer, { height: cardDimensions.cardHeight * cardDimensions.imageHeight }]}>
+                <Image
+                  source={{ uri: currentPhoto }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+                
+                {/* Photo navigation dots */}
+                {hasMultiplePhotos && (
+                  <View style={styles.photoIndicators}>
+                    {displayedProfile.photos!.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.photoIndicator,
+                          {
+                            backgroundColor: index === currentPhotoIndex 
+                              ? 'white' 
+                              : 'rgba(255, 255, 255, 0.4)'
+                          }
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+                
+                {/* Photo navigation areas */}
+                {hasMultiplePhotos && (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.photoNavArea, styles.photoNavLeft]}
                       onPress={(e) => {
                         e.stopPropagation();
                         handlePhotoNavigation('prev');
                       }}
-                    activeOpacity={0.7}
-                  />
-                  <TouchableOpacity
-                    style={[styles.photoNavArea, styles.photoNavRight]}
+                      activeOpacity={0.7}
+                    />
+                    <TouchableOpacity
+                      style={[styles.photoNavArea, styles.photoNavRight]}
                       onPress={(e) => {
                         e.stopPropagation();
                         handlePhotoNavigation('next');
                       }}
-                    activeOpacity={0.7}
-                  />
-                </>
-              )}
-              
-              {/* Profile info button */}
-              <TouchableOpacity
-                style={styles.infoButton}
+                      activeOpacity={0.7}
+                    />
+                  </>
+                )}
+                
+                {/* Profile info button */}
+                <TouchableOpacity
+                  style={styles.infoButton}
                   onPress={(e) => {
                     e.stopPropagation();
                     setShowDetailModal(true);
                   }}
-              >
-                <MaterialIcon name={IconNames.info} size={20} color="white" />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.profileInfo}>
-              <View style={styles.profileHeader}>
-                <Text style={[styles.profileName, { color: theme.colors.text }]}>
-                  {displayedProfile.first_name}, {calculateAge(displayedProfile.birthdate)}
-                </Text>
-                {displayedProfile.is_online && (
-                  <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
-                )}
-                  {isMobile && (
-                    <MaterialIcon 
-                      name={IconNames.forward} 
-                      size={16} 
-                      color={theme.colors.textSecondary} 
-                      style={{ marginLeft: 'auto' }}
-                    />
-                  )}
+                >
+                  <MaterialIcon name={IconNames.info} size={20} color="white" />
+                </TouchableOpacity>
               </View>
               
-              <Text style={[styles.profileLocation, { color: theme.colors.textSecondary }]}>
-                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> 
-                {displayedProfile.location ? (
-                  (() => {
-                    try {
-                      return formatLocationForDisplay(displayedProfile.location, 'city-state');
-                    } catch (error) {
-                      console.error('❌ Error formatting location:', error, 'Location:', displayedProfile.location);
-                      return displayedProfile.location || 'Location not available';
-                    }
-                  })()
-                ) : (
-                  'Location not available'
-                )}
-                {/* Debug info */}
-                {__DEV__ && (
-                  <Text style={{ fontSize: 10, opacity: 0.7 }}>
-                    {' '}(Debug: {JSON.stringify(displayedProfile.location)})
+              {/* Profile Info */}
+              <View style={[styles.profileInfo, { padding: cardDimensions.padding }]}>
+                <View style={styles.profileHeader}>
+                  <Text style={[styles.profileName, { 
+                    color: theme.colors.text,
+                    fontSize: cardDimensions.fontSize.name 
+                  }]}>
+                    {displayedProfile.first_name}, {calculateAge(displayedProfile.birthdate)}
                   </Text>
-                )}
-              </Text>
-              
-              {displayedProfile.bio && (
-                <Text 
-                  style={[styles.profileBio, { color: theme.colors.text }]}
-                  numberOfLines={2}
-                  ellipsizeMode="tail"
-                >
-                  {displayedProfile.bio}
-                </Text>
-              )}
-              
-              {displayedProfile.interests && displayedProfile.interests.length > 0 && (
-                <View style={styles.interestsContainer}>
-                  {displayedProfile.interests.slice(0, 3).map((interest, index) => (
-                    <View
-                      key={index}
-                      style={[styles.interestTag, { backgroundColor: theme.colors.primary }]}
-                    >
-                      <Text style={styles.interestText}>{interest}</Text>
-                    </View>
-                  ))}
-                  {displayedProfile.interests.length > 3 && (
-                    <Text style={[styles.moreInterests, { color: theme.colors.textSecondary }]}>
-                      +{displayedProfile.interests.length - 3} more
-                    </Text>
+                  {displayedProfile.is_online && (
+                    <View style={[styles.onlineIndicator, { backgroundColor: theme.colors.success }]} />
                   )}
                 </View>
-              )}
+                
+                {displayedProfile.bio && (
+                  <Text 
+                    style={[styles.profileBio, { 
+                      color: theme.colors.text,
+                      fontSize: cardDimensions.fontSize.bio
+                    }]}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    {displayedProfile.bio}
+                  </Text>
+                )}
+                
+                {displayedProfile.interests && displayedProfile.interests.length > 0 && (
+                  <View style={styles.interestsContainer}>
+                    {displayedProfile.interests.slice(0, 3).map((interest, index) => (
+                      <View
+                        key={index}
+                        style={[styles.interestTag, { backgroundColor: theme.colors.primary }]}
+                      >
+                        <Text style={styles.interestText}>{interest}</Text>
+                      </View>
+                    ))}
+                    {displayedProfile.interests.length > 3 && (
+                      <Text style={[styles.moreInterests, { color: theme.colors.textSecondary }]}>
+                        +{displayedProfile.interests.length - 3} more
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
             </View>
-            </ListItem>
           </TouchableOpacity>
         </Animated.View>
       </View>
 
+      {/* Action Buttons */}
       <View style={styles.actionButtons}>
         <TouchableOpacity 
           style={[styles.actionButton, styles.passButton]} 
@@ -729,28 +663,6 @@ export default function DiscoverScreen() {
                 {displayedProfile.first_name}, {calculateAge(displayedProfile.birthdate)}
               </Text>
               
-              <Text style={[styles.modalLocation, { color: theme.colors.textSecondary }]}>
-                <MaterialIcon name={IconNames.location} size={16} color={theme.colors.textSecondary} /> 
-                {displayedProfile.location ? (
-                  (() => {
-                    try {
-                      return formatLocationForDisplay(displayedProfile.location, 'city-state');
-                    } catch (error) {
-                      console.error('❌ Error formatting location in modal:', error, 'Location:', displayedProfile.location);
-                      return displayedProfile.location || 'Location not available';
-                    }
-                  })()
-                ) : (
-                  'Location not available'
-                )}
-                {/* Debug info */}
-                {__DEV__ && (
-                  <Text style={{ fontSize: 10, opacity: 0.7 }}>
-                    {' '}(Debug: {JSON.stringify(displayedProfile.location)})
-                  </Text>
-                )}
-              </Text>
-              
               {displayedProfile.bio && (
                 <View style={styles.modalSection}>
                   <Text style={[styles.modalSectionTitle, { color: theme.colors.text }]}>About</Text>
@@ -793,15 +705,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 30, // Increase top padding
     paddingBottom: 10,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    marginBottom: 10,
+    paddingVertical: 15,
+    marginBottom: 20, // Increase bottom margin
+    paddingHorizontal: 16, // Add horizontal padding
+    zIndex: 1000, // Ensure header is above other elements
   },
   headerCenter: {
     flexDirection: 'row',
@@ -815,12 +729,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-  },
-  locationDisplay: {
-    marginLeft: 10,
-  },
-  settingsButton: {
-    fontSize: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -874,20 +782,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 20, // Add top margin to separate from header
     marginBottom: 10,
+    paddingTop: 20, // Add padding to ensure separation
   },
   profileCardContainer: {
-    width: '100%',
-    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 10, // Add top margin for additional separation
+    zIndex: 1, // Lower z-index than header
   },
   profileCard: {
-    width: '100%',
-    maxWidth: 400,
-    height: Math.min(height * 0.68, height - 200), // Ensure card doesn't exceed available space
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: 'white',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -897,135 +805,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  profileImage: {
-    width: '100%',
-    height: '72%',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  profileInfo: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  profileName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  onlineIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  profileLocation: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  profileBio: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-  },
-  interestTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-  },
-  interestText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  moreInterests: {
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-  actionButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  passButton: {
-    backgroundColor: '#6B7280',
-  },
-  passButtonText: {
-    fontSize: 28,
-    color: 'white',
-  },
-  superLikeButton: {
-    backgroundColor: '#08D9D6',
-  },
-  superLikeText: {
-    fontSize: 28,
-    color: 'white',
-  },
-  likeButton: {
-    backgroundColor: '#FF2E63',
-  },
-  likeButtonText: {
-    fontSize: 28,
-    color: 'white',
-  },
-  swipeIndicator: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    borderRadius: 12,
-  },
-  likeIndicator: {
-    backgroundColor: 'rgba(76, 175, 80, 0.9)', // Green for like with transparency
-    top: 20,
-  },
-  passIndicator: {
-    backgroundColor: 'rgba(244, 67, 54, 0.9)', // Red for pass with transparency
-    bottom: 20,
-  },
-  swipeIndicatorText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: '72%',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   photoIndicators: {
     flexDirection: 'row',
@@ -1070,9 +858,119 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
-  infoButtonText: {
+  profileInfo: {
+    padding: 16,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  profileName: {
+    fontWeight: 'bold',
+    flex: 1,
     fontSize: 20,
+  },
+  onlineIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  profileBio: {
+    lineHeight: 20,
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  interestsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  interestTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  interestText: {
     color: 'white',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  moreInterests: {
+    fontStyle: 'italic',
+    fontSize: 12,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+  },
+  actionButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  passButton: {
+    backgroundColor: '#6B7280',
+  },
+  passButtonText: {
+    fontSize: 28,
+    color: 'white',
+  },
+  superLikeButton: {
+    backgroundColor: '#08D9D6',
+  },
+  superLikeText: {
+    fontSize: 28,
+    color: 'white',
+  },
+  likeButton: {
+    backgroundColor: '#FF2E63',
+  },
+  likeButtonText: {
+    fontSize: 28,
+    color: 'white',
+  },
+  swipeIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    borderRadius: 12,
+  },
+  likeIndicator: {
+    backgroundColor: 'rgba(76, 175, 80, 0.9)',
+    top: 20,
+  },
+  passIndicator: {
+    backgroundColor: 'rgba(244, 67, 54, 0.9)',
+    bottom: 20,
+  },
+  swipeIndicatorText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   modalContainer: {
     flex: 1,
@@ -1104,10 +1002,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 5,
-  },
-  modalLocation: {
-    fontSize: 18,
-    marginBottom: 15,
   },
   modalSection: {
     marginBottom: 15,
@@ -1145,16 +1039,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  debugButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignSelf: 'center',
-    marginTop: 10,
-  },
-  debugButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 }); 

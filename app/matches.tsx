@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -218,8 +219,7 @@ export default function MatchesScreen() {
         style={[
           styles.profileCard,
           { 
-            width: isDesktop ? '18%' : '31%',
-            height: isDesktop ? 200 : 160, // Fixed height instead of aspectRatio
+            width: isDesktop ? '18%' : '48%', // 2 columns for mobile
             backgroundColor: theme.colors.surface,
             borderColor: theme.colors.border,
             shadowColor: theme.colors.primary,
@@ -235,39 +235,26 @@ export default function MatchesScreen() {
         onPress={() => handleMatchPress(match)}
         activeOpacity={0.7}
       >
-            <Image
-              source={{ uri: profilePhoto }}
-          style={styles.profileImage}
-              defaultSource={{ uri: 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Loading' }}
-            />
-        
-        {/* Online status indicator */}
-        <View style={[
-                styles.onlineIndicator, 
-          {
-            backgroundColor: isOnline ? theme.colors.success : theme.colors.disabled,
-            width: isDesktop ? 12 : 10,
-            height: isDesktop ? 12 : 10,
-            borderRadius: isDesktop ? 6 : 5,
-            top: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
-            left: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
-          }
-        ]} />
-        
-        <View style={[
-          styles.profileInfo,
-          { padding: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs') }
-        ]}>
-              <Text style={[
-            styles.profileName, 
-            { 
-              color: 'white',
-              fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('sm'),
-              fontWeight: '600'
+        {/* Image Section */}
+        <View style={styles.imageSection}>
+          <Image
+            source={{ uri: profilePhoto }}
+            style={styles.profileImage}
+            defaultSource={{ uri: 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Loading' }}
+          />
+          
+          {/* Online status indicator */}
+          <View style={[
+            styles.onlineIndicator, 
+            {
+              backgroundColor: isOnline ? theme.colors.success : theme.colors.disabled,
+              width: isDesktop ? 16 : 12, // Increased from 12/8 to 16/12
+              height: isDesktop ? 16 : 12, // Increased from 12/8 to 16/12
+              borderRadius: isDesktop ? 8 : 6, // Adjusted radius for new size
+              top: 6, // Adjusted positioning for larger size
+              left: 6, // Adjusted positioning for larger size
             }
-              ]}>
-            {otherProfile.first_name}
-          </Text>
+          ]} />
           
           {/* Super Match badge only for super matches */}
           {isSuperMatch && (
@@ -275,17 +262,17 @@ export default function MatchesScreen() {
               styles.matchTypeBadge,
               { 
                 backgroundColor: theme.colors.primary,
-                top: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
-                right: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
-                paddingHorizontal: isDesktop ? getResponsiveSpacing('xs') : 4,
-                paddingVertical: isDesktop ? getResponsiveSpacing('xs') : 2,
+                top: 4,
+                right: 4,
+                paddingHorizontal: isDesktop ? getResponsiveSpacing('xs') : 3,
+                paddingVertical: isDesktop ? getResponsiveSpacing('xs') : 1,
               }
             ]}>
               <Text style={[
                 styles.matchTypeText, 
                 { 
                   color: 'white',
-                  fontSize: isDesktop ? getResponsiveFontSize('xs') : 10,
+                  fontSize: isDesktop ? getResponsiveFontSize('xs') : 8,
                   fontWeight: '600'
                 }
               ]}>
@@ -293,6 +280,23 @@ export default function MatchesScreen() {
               </Text>
             </View>
           )}
+        </View>
+        
+        {/* Divider Line */}
+        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+        
+        {/* Name Section */}
+        <View style={styles.nameSection}>
+          <Text style={[
+            styles.profileName, 
+            { 
+              color: theme.colors.text,
+              fontSize: isDesktop ? getResponsiveFontSize('md') : getResponsiveFontSize('xs'),
+              fontWeight: '600'
+            }
+          ]}>
+            {otherProfile.first_name}
+          </Text>
         </View>
       </TouchableOpacity>
     );
@@ -318,11 +322,11 @@ export default function MatchesScreen() {
           data={matches}
           renderItem={renderProfileCard}
           keyExtractor={(item) => item.id}
-          numColumns={isDesktop ? 5 : 3}
+          numColumns={isDesktop ? 5 : 2} // 2 columns for mobile
           columnWrapperStyle={[
             styles.gridRow,
             { 
-              justifyContent: 'flex-start', // Left align for both desktop and mobile
+              justifyContent: 'flex-start', // Left align items
               paddingHorizontal: isDesktop ? getResponsiveSpacing('sm') : getResponsiveSpacing('xs'),
             }
                 ]}
@@ -431,7 +435,7 @@ export default function MatchesScreen() {
           Matches ({matches.length})
         </Text>
         <TouchableOpacity onPress={handleRefresh}>
-          <Text style={[styles.refreshButton, { color: theme.colors.primary }]}>🔄</Text>
+          <MaterialIcons name="refresh" size={28} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -516,18 +520,13 @@ const styles = StyleSheet.create({
     paddingVertical: getResponsiveSpacing('sm'),
     paddingHorizontal: getResponsiveSpacing('sm'),
     minHeight: 44, // Better touch target for mobile
+    minWidth: 60, // Ensure button is wide enough
   },
   title: {
     fontSize: getResponsiveFontSize('xxl'),
     fontWeight: 'bold',
     flex: 1,
     textAlign: 'center',
-  },
-  refreshButton: {
-    fontSize: getResponsiveFontSize('xl'),
-    paddingVertical: getResponsiveSpacing('sm'),
-    paddingHorizontal: getResponsiveSpacing('sm'),
-    minHeight: 44, // Better touch target for mobile
   },
   loadingContainer: {
     flex: 1,
@@ -754,8 +753,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   profileCard: {
-    width: '31%', // Slightly wider for mobile (3 columns)
-    height: 160, // Fixed height for consistent card size
+    width: '48%', // 2 columns for mobile (48% width)
     borderRadius: 16, // Larger border radius for modern look
     overflow: 'hidden',
     borderWidth: 1,
@@ -771,7 +769,7 @@ const styles = StyleSheet.create({
   },
   profileImage: {
     width: '100%',
-    height: '75%', // Slightly more image space
+    height: '100%', // Fill the imageSection container
     resizeMode: 'cover',
   },
   profileInfo: {
@@ -782,34 +780,64 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.8)', // Slightly more opaque for better readability
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
+    padding: 6, // Default padding for mobile
   },
   profileName: {
     fontWeight: '600',
     color: 'white',
     textAlign: 'center',
+    fontSize: getResponsiveFontSize('xs'), // Default to small font for mobile
   },
   matchTypeBadge: {
     position: 'absolute',
     borderRadius: 12, // Larger border radius
+    top: 4, // Default positioning for mobile
+    right: 4,
+    paddingHorizontal: 3, // Default padding for mobile
+    paddingVertical: 1,
   },
   matchTypeText: {
     fontWeight: '600',
+    fontSize: 8, // Default font size for mobile
+    color: 'white',
   },
   sectionContainer: {
     marginBottom: getResponsiveSpacing('lg'),
   },
   sectionTitle: {
     fontWeight: 'bold',
+    marginBottom: getResponsiveSpacing('sm'), // Default margin for mobile
+    paddingHorizontal: getResponsiveSpacing('xs'), // Default padding for mobile
   },
   gridRow: {
     flexWrap: 'wrap',
-    justifyContent: 'flex-start', // Ensure left alignment
+    justifyContent: 'flex-start', // Left align items
     alignItems: 'flex-start', // Align items to top
+    marginBottom: getResponsiveSpacing('sm'), // Add bottom margin for better separation
   },
   gridContainer: {
     // Padding will be applied inline for responsive design
+    paddingTop: getResponsiveSpacing('xs'), // Add top padding for better spacing
   },
   matchesContainer: {
     flex: 1,
+  },
+  imageSection: {
+    position: 'relative',
+    width: '100%',
+    height: 120, // Increased height to fill most of card
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+    marginBottom: getResponsiveSpacing('xs'), // Reduced margin for tighter layout
+  },
+  divider: {
+    height: 1,
+    marginVertical: getResponsiveSpacing('xs'), // Reduced vertical margins
+  },
+  nameSection: {
+    paddingHorizontal: getResponsiveSpacing('sm'),
+    paddingBottom: getResponsiveSpacing('xs'), // Reduced bottom padding
+    paddingTop: getResponsiveSpacing('xs'), // Added top padding for balance
   },
 }); 

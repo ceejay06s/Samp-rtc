@@ -7,7 +7,7 @@ export interface NotificationData {
   title: string;
   body: string;
   data?: any;
-  type?: 'message' | 'match' | 'post' | 'comment' | 'typing' | 'online' | 'general';
+  type?: 'message' | 'match' | 'typing' | 'online' | 'general';
   priority?: 'high' | 'normal' | 'low';
 }
 
@@ -15,8 +15,6 @@ export interface NotificationPreferences {
   push_enabled: boolean;
   message_notifications: boolean;
   match_notifications: boolean;
-  post_notifications: boolean;
-  comment_notifications: boolean;
   typing_notifications: boolean;
   online_status_notifications: boolean;
   sound_enabled: boolean;
@@ -125,15 +123,9 @@ export class HybridNotificationService {
         return;
       }
 
-      // Register service worker with proper scope
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/'
-      });
+      // Register service worker
+      const registration = await navigator.serviceWorker.register('/sw.js');
       console.log('Service Worker registered:', registration);
-
-      // Wait for service worker to be ready
-      await navigator.serviceWorker.ready;
-      console.log('Service Worker is ready');
 
       // Get push subscription
       const subscription = await registration.pushManager.subscribe({
@@ -253,13 +245,14 @@ export class HybridNotificationService {
   private async sendWebNotification(notification: NotificationData): Promise<boolean> {
     try {
       if (Notification.permission === 'granted') {
-                          new Notification(notification.title, {
-                    body: notification.body,
-                    data: notification.data || {},
-                    icon: '/icon.png',
-                    tag: notification.type || 'general',
-                    requireInteraction: notification.priority === 'high',
-                  });
+        new Notification(notification.title, {
+          body: notification.body,
+          data: notification.data || {},
+          icon: '/icon.png',
+          badge: '/badge.png',
+          tag: notification.type || 'general',
+          requireInteraction: notification.priority === 'high',
+        });
         return true;
       }
       return false;
@@ -270,7 +263,7 @@ export class HybridNotificationService {
   }
 
   // Show in-app notification (works on all platforms)
-  showInAppNotification(notification: NotificationData): void {
+  private showInAppNotification(notification: NotificationData): void {
     // Add to queue
     this.inAppNotificationQueue.push(notification);
     
@@ -422,67 +415,6 @@ export class HybridNotificationService {
       const { status } = await Notifications.getPermissionsAsync();
       return status === 'granted';
     }
-  }
-
-  // Specific notification methods for different events
-  async sendNewMessageNotification(userId: string, message: string, conversationId: string): Promise<boolean> {
-    return this.sendNotification({
-      title: 'New Message',
-      body: message,
-      type: 'message',
-      priority: 'high',
-      data: { conversationId, userId }
-    });
-  }
-
-  async sendNewMatchNotification(userId: string, userName: string): Promise<boolean> {
-    return this.sendNotification({
-      title: 'New Match!',
-      body: `You matched with ${userName}!`,
-      type: 'match',
-      priority: 'high',
-      data: { userId, userName }
-    });
-  }
-
-  async sendNewPostNotification(userId: string, userName: string, postTitle: string): Promise<boolean> {
-    return this.sendNotification({
-      title: 'New Post',
-      body: `${userName} posted: ${postTitle}`,
-      type: 'post',
-      priority: 'normal',
-      data: { userId, userName, postTitle }
-    });
-  }
-
-  async sendNewCommentNotification(userId: string, userName: string, comment: string, postId: string): Promise<boolean> {
-    return this.sendNotification({
-      title: 'New Comment',
-      body: `${userName} commented: ${comment}`,
-      type: 'comment',
-      priority: 'normal',
-      data: { userId, userName, comment, postId }
-    });
-  }
-
-  async sendTypingNotification(userId: string, userName: string, conversationId: string): Promise<boolean> {
-    return this.sendNotification({
-      title: `${userName} is typing...`,
-      body: '',
-      type: 'typing',
-      priority: 'low',
-      data: { userId, userName, conversationId }
-    });
-  }
-
-  async sendOnlineStatusNotification(userId: string, userName: string, isOnline: boolean): Promise<boolean> {
-    return this.sendNotification({
-      title: isOnline ? `${userName} is online` : `${userName} went offline`,
-      body: '',
-      type: 'online',
-      priority: 'low',
-      data: { userId, userName, isOnline }
-    });
   }
 }
 

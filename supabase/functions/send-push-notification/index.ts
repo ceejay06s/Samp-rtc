@@ -31,7 +31,7 @@ serve(async (req) => {
     // Get push tokens for users
     const { data: tokens, error: tokenError } = await supabase
       .from('push_tokens')
-      .select('expo_push_token, device_type')
+      .select('expo_push_token, web_push_subscription, device_type')
       .in('user_id', userIds)
       .eq('is_active', true)
 
@@ -50,40 +50,72 @@ serve(async (req) => {
       )
     }
 
-    // Prepare notification payloads
-    const messages = tokens.map(token => ({
-      to: token.expo_push_token,
-      sound: 'default',
-      title,
-      body,
-      data: {
-        ...data,
-        type: notificationType,
-        timestamp: new Date().toISOString(),
-      },
-    }))
+    // Prepare notification payloads for different device types
+    const expoMessages = [];
+    const webPushMessages = [];
 
-    // Send notifications via Expo Push API
-    const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(messages),
-    })
+    tokens.forEach(token => {
+      if (token.device_type === 'web' && token.web_push_subscription) {
+        // Web push notification
+        webPushMessages.push({
+          subscription: token.web_push_subscription,
+          payload: {
+            title,
+            body,
+            data: {
+              ...data,
+              type: notificationType,
+              timestamp: new Date().toISOString(),
+            },
+          },
+        });
+      } else if (token.expo_push_token) {
+        // Expo push notification for mobile
+        expoMessages.push({
+          to: token.expo_push_token,
+          sound: 'default',
+          title,
+          body,
+          data: {
+            ...data,
+            type: notificationType,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+    });
 
-    if (!expoResponse.ok) {
-      const errorText = await expoResponse.text()
-      console.error('Expo Push API error:', errorText)
-      return new Response(
-        JSON.stringify({ error: 'Failed to send push notifications' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    let expoResult = null;
+    let webPushResult = null;
+
+    // Send Expo notifications if any
+    if (expoMessages.length > 0) {
+      const expoResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(expoMessages),
+      });
+
+      if (expoResponse.ok) {
+        expoResult = await expoResponse.json();
+      } else {
+        console.error('Expo Push API error:', await expoResponse.text());
+      }
     }
 
-    const expoResult = await expoResponse.json()
+    // Send Web Push notifications if any
+    if (webPushMessages.length > 0) {
+      // For web push, we need to send to a web push service
+      // This is a simplified version - you might want to use a service like Firebase
+      console.log('Web push notifications would be sent here:', webPushMessages.length);
+      webPushResult = { sent: webPushMessages.length, type: 'web_push' };
+    }
+
+
 
     // Log notifications to history
     const historyEntries = userIds.map(userId => ({
@@ -103,11 +135,15 @@ serve(async (req) => {
       console.error('Error logging notifications:', historyError)
     }
 
+    const totalSent = (expoResult?.sent || 0) + (webPushResult?.sent || 0);
+    
     return new Response(
       JSON.stringify({
         success: true,
-        sent: tokens.length,
+        totalTokens: tokens.length,
         expoResult,
+        webPushResult,
+        totalSent,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

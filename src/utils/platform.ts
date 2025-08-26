@@ -14,7 +14,15 @@ export interface PlatformInfo {
   environment: 'expo-go' | 'standalone' | 'web';
 }
 
+// Cache the platform info to prevent recreation on every call
+let cachedPlatformInfo: PlatformInfo | null = null;
+
 export const getPlatformInfo = (): PlatformInfo => {
+  // Return cached version if available
+  if (cachedPlatformInfo) {
+    return cachedPlatformInfo;
+  }
+
   const isAndroid = Platform.OS === 'android';
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
@@ -53,7 +61,8 @@ export const getPlatformInfo = (): PlatformInfo => {
     environment = 'web';
   }
 
-  return {
+  // Cache the result
+  cachedPlatformInfo = {
     isAndroid,
     isIOS,
     isWeb,
@@ -65,17 +74,19 @@ export const getPlatformInfo = (): PlatformInfo => {
     platform: Platform.OS as 'android' | 'ios' | 'web',
     environment,
   };
+
+  return cachedPlatformInfo;
 };
 
-// Convenience functions
-export const isAndroid = () => getPlatformInfo().isAndroid;
-export const isIOS = () => getPlatformInfo().isIOS;
-export const isWeb = () => getPlatformInfo().isWeb;
-export const isExpoGo = () => getPlatformInfo().isExpoGo;
-export const isAndroidBrowser = () => getPlatformInfo().isAndroidBrowser;
-export const isStandalone = () => getPlatformInfo().isStandalone;
-export const isMobileBrowser = () => getPlatformInfo().isMobileBrowser;
-export const isDesktopBrowser = () => getPlatformInfo().isDesktopBrowser;
+// Convenience functions - now these return stable values
+export const isAndroid = (): boolean => getPlatformInfo().isAndroid;
+export const isIOS = (): boolean => getPlatformInfo().isIOS;
+export const isWeb = (): boolean => getPlatformInfo().isWeb;
+export const isExpoGo = (): boolean => getPlatformInfo().isExpoGo;
+export const isAndroidBrowser = (): boolean => getPlatformInfo().isAndroidBrowser;
+export const isStandalone = (): boolean => getPlatformInfo().isStandalone;
+export const isMobileBrowser = (): boolean => getPlatformInfo().isMobileBrowser;
+export const isDesktopBrowser = (): boolean => getPlatformInfo().isDesktopBrowser;
 
 // Get user agent string (web only)
 export const getUserAgent = (): string => {
@@ -104,11 +115,20 @@ export const getBrowserInfo = () => {
   return { name: 'Unknown', isUnknown: true };
 };
 
+// Cache platform styles to prevent recreation
+let cachedPlatformStyles: any = null;
+
 // Platform-specific styling helpers
 export const getPlatformStyles = () => {
+  // Return cached version if available
+  if (cachedPlatformStyles) {
+    return cachedPlatformStyles;
+  }
+
   const platformInfo = getPlatformInfo();
   
-  return {
+  // Cache the result
+  cachedPlatformStyles = {
     // Android-specific styles
     android: {
       elevation: platformInfo.isAndroid ? 4 : 0,
@@ -130,13 +150,24 @@ export const getPlatformStyles = () => {
       boxShadow: platformInfo.isWeb ? '0 2px 4px rgba(0,0,0,0.1)' : undefined,
     },
   };
+
+  return cachedPlatformStyles;
 };
+
+// Cache environment config to prevent recreation
+let cachedEnvironmentConfig: any = null;
 
 // Environment-specific configuration
 export const getEnvironmentConfig = () => {
+  // Return cached version if available
+  if (cachedEnvironmentConfig) {
+    return cachedEnvironmentConfig;
+  }
+
   const platformInfo = getPlatformInfo();
   
-  return {
+  // Cache the result
+  cachedEnvironmentConfig = {
     // Enable/disable features based on environment
     features: {
       // Some features might not work in Expo Go
@@ -161,4 +192,6 @@ export const getEnvironmentConfig = () => {
       baseFontSize: platformInfo.isWeb ? 16 : 14,
     },
   };
+
+  return cachedEnvironmentConfig;
 };

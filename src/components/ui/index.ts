@@ -40,3 +40,10 @@ export { TGSRendererV2 } from './TGSRendererV2';
 export { WebAlert } from './WebAlert';
 export { WebFileInput } from './WebFileInput';
 
+// Notification Components
+export { InAppNotification } from './InAppNotification';
+export { NotificationContainer } from './NotificationContainer';
+export { NotificationSettings } from './NotificationSettings';
+export { NotificationTest } from './NotificationTest';
+export { VapidTest } from './VapidTest';
+

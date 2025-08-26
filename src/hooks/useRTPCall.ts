@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '../../lib/AuthContext';
-import RTPService from '../services/rtpService';
-import WebRTCManager from '../services/webRTCManager';
+import { RTPService } from '../services/rtpService';
+import { WebRTCManager } from '../services/webRTCManager';
 import { CallStatus, CallType, RTPCall } from '../types';
+import { APP_CONFIG } from '../utils/appConfig';
 
 export interface UseRTPCallOptions {
   onCallStateChange?: (status: CallStatus) => void;
@@ -157,7 +158,7 @@ export function useRTPCall(options: UseRTPCallOptions = {}): UseRTPCallReturn {
         const duration = Math.floor((Date.now() - callStartTime.current) / 1000);
         setCallDuration(duration);
       }
-    }, 1000) as any;
+    }, APP_CONFIG.RTP_CALL.DURATION_UPDATE_INTERVAL) as any;
   }, []);
 
   const stopDurationTimer = useCallback(() => {
@@ -178,7 +179,7 @@ export function useRTPCall(options: UseRTPCallOptions = {}): UseRTPCallReturn {
       } catch (error) {
         console.error('Failed to get call stats:', error);
       }
-    }, 5000) as any; // Update stats every 5 seconds
+    }, APP_CONFIG.RTP_CALL.STATS_UPDATE_INTERVAL) as any;
   }, []);
 
   const stopStatsTimer = useCallback(() => {

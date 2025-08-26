@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { LOCATION_CONFIG } from '../utils/locationConfig';
 
 export interface LocationData {
   latitude: number;
@@ -118,6 +119,11 @@ export class LocationService {
   private static readonly OVERPASS_BASE = 'https://overpass-api.de/api/interpreter';
   private static readonly REQUEST_DELAY = 1000; // 1 second delay between requests
   private static lastRequestTime = 0;
+  
+  // Add caching for network connectivity and geocoding service checks
+  private static networkCheckCache: { timestamp: number; isAvailable: boolean } | null = null;
+  private static geocodingServiceCache: { timestamp: number; isAccessible: boolean } | null = null;
+  private static readonly CACHE_DURATION = LOCATION_CONFIG.NETWORK_CACHE_DURATION;
 
   // Alternative geocoding services - Photon only
   private static readonly FALLBACK_SERVICES = [
@@ -136,16 +142,24 @@ export class LocationService {
   ];
 
   /**
-   * Check if any geocoding services are accessible
+   * Check if any geocoding services are accessible with caching
    */
   static async isAnyGeocodingServiceAccessible(): Promise<boolean> {
     try {
+      // Check cache first
+      if (this.geocodingServiceCache && 
+          (Date.now() - this.geocodingServiceCache.timestamp) < this.CACHE_DURATION) {
+        console.log('🌍 LocationService: Using cached geocoding service status');
+        return this.geocodingServiceCache.isAccessible;
+      }
+
       console.log('🌍 LocationService: Checking geocoding service accessibility...');
       
       // First check if we have general internet connectivity
       const isNetworkAvailable = await this.isNetworkAvailable();
       if (!isNetworkAvailable) {
         console.warn('⚠️ LocationService: No internet connectivity available');
+        this.geocodingServiceCache = { timestamp: Date.now(), isAccessible: false };
         return false;
       }
       
@@ -163,6 +177,7 @@ export class LocationService {
               });
               if (response.ok) {
                 console.log(`✅ LocationService: ${service.name} is accessible`);
+                this.geocodingServiceCache = { timestamp: Date.now(), isAccessible: true };
                 return true;
               }
             } else if (service.type === 'locationiq') {
@@ -173,6 +188,7 @@ export class LocationService {
               });
               if (response.ok) {
                 console.log(`✅ LocationService: ${service.name} is accessible`);
+                this.geocodingServiceCache = { timestamp: Date.now(), isAccessible: true };
                 return true;
               }
             }
@@ -183,18 +199,27 @@ export class LocationService {
       }
       
       console.warn('⚠️ LocationService: No geocoding services are accessible');
+      this.geocodingServiceCache = { timestamp: Date.now(), isAccessible: false };
       return false;
     } catch (error) {
       console.warn('⚠️ LocationService: Service accessibility check failed:', error);
+      this.geocodingServiceCache = { timestamp: Date.now(), isAccessible: false };
       return false;
     }
   }
 
   /**
-   * Check network connectivity
+   * Check network connectivity with caching
    */
   static async isNetworkAvailable(): Promise<boolean> {
     try {
+      // Check cache first
+      if (this.networkCheckCache && 
+          (Date.now() - this.networkCheckCache.timestamp) < this.CACHE_DURATION) {
+        console.log('🌐 LocationService: Using cached network status');
+        return this.networkCheckCache.isAvailable;
+      }
+
       console.log('🌐 LocationService: Checking network connectivity...');
       
       // Use reliable endpoints that are almost always accessible
@@ -213,6 +238,7 @@ export class LocationService {
           });
           if (response.ok) {
             console.log(`✅ LocationService: Network connectivity confirmed via: ${endpoint}`);
+            this.networkCheckCache = { timestamp: Date.now(), isAvailable: true };
             return true;
           }
         } catch (error) {
@@ -222,9 +248,11 @@ export class LocationService {
       }
       
       console.warn('⚠️ LocationService: All reliable network connectivity checks failed');
+      this.networkCheckCache = { timestamp: Date.now(), isAvailable: false };
       return false;
     } catch (error) {
       console.warn('⚠️ LocationService: Network connectivity check failed:', error);
+      this.networkCheckCache = { timestamp: Date.now(), isAvailable: false };
       return false;
     }
   }
@@ -264,26 +292,29 @@ export class LocationService {
         throw new Error('Location permission denied');
       }
 
-      // Get current position
+      // Get current position with optimized settings
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 10000,
-        distanceInterval: 10,
+        accuracy: Location.Accuracy[LOCATION_CONFIG.LOCATION_ACCURACY.toUpperCase() as keyof typeof Location.Accuracy] || Location.Accuracy.Balanced,
+        timeInterval: LOCATION_CONFIG.LOCATION_TIME_INTERVAL,
+        distanceInterval: LOCATION_CONFIG.LOCATION_DISTANCE_INTERVAL,
       });
 
       const { latitude, longitude } = location.coords;
       console.log(`📍 LocationService: Got coordinates: ${latitude}, ${longitude}`);
 
-      // Get address using Photon
+      // Only attempt geocoding if we haven't done it recently for these coordinates
       let address = null;
       let addressData = null;
 
       try {
+        // Check if geocoding services are accessible (with caching)
         const isServiceAccessible = await this.isAnyGeocodingServiceAccessible();
         if (isServiceAccessible) {
+          // Only do reverse geocoding if we really need it
+          console.log('🌍 LocationService: Attempting reverse geocoding...');
           address = await this.reverseGeocode(latitude, longitude);
           
-          // Get structured address data from Photon
+          // Get structured address data from Photon (only if needed)
           try {
             console.log('🌍 LocationService: Fetching structured address data from Photon...');
             const photonResult = await this.reverseGeocodeWithPhoton(latitude, longitude, 'https://photon.komoot.io');
@@ -297,7 +328,7 @@ export class LocationService {
             console.warn('⚠️ LocationService: Error fetching structured address data:', error);
           }
         } else {
-          console.warn('⚠️ LocationService: No geocoding services accessible, using fallback');
+          console.log('⚠️ LocationService: Using fallback geocoding (no external services)');
           const fallbackData = await this.fallbackGeocoding(latitude, longitude);
           address = {
             formatted_address: fallbackData.formattedAddress || fallbackData.address || 'Location unavailable'

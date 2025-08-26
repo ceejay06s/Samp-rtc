@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
 import { LocationService } from '../services/locationService';
+import { APP_CONFIG } from '../utils/appConfig';
+import { getLocationUpdateDelay, LOCATION_CONFIG, shouldAllowLocationUpdate } from '../utils/locationConfig';
 
 interface UseAutoLocationProps {
   userId?: string;
@@ -15,12 +16,11 @@ export const useAutoLocation = ({
   onLocationUpdate,
   onError,
 }: UseAutoLocationProps) => {
-  const appState = useRef(AppState.currentState);
   const lastLocationUpdate = useRef<number>(0);
-  const locationUpdateInterval = 10 * 60 * 1000; // 10 minutes minimum between updates (increased from 5)
   const isUpdating = useRef<boolean>(false);
+  const hasInitialized = useRef<boolean>(false);
 
-  const updateUserLocation = async (forceUpdate = false) => {
+  const updateUserLocation = useCallback(async (forceUpdate = false, updateType: 'normal' | 'app_state_change' = 'normal') => {
     // Only update if location sharing is enabled and user is logged in
     if (!isLocationSharingEnabled || !userId) {
       return;
@@ -32,9 +32,8 @@ export const useAutoLocation = ({
       return;
     }
 
-    const now = Date.now();
-    // Prevent too frequent updates unless forced
-    if (!forceUpdate && (now - lastLocationUpdate.current) < locationUpdateInterval) {
+    // Check if update should be allowed based on time intervals
+    if (!shouldAllowLocationUpdate(lastLocationUpdate.current, forceUpdate, updateType)) {
       console.log('⏰ Location update skipped - too recent');
       return;
     }
@@ -50,7 +49,7 @@ export const useAutoLocation = ({
         const success = await LocationService.saveLocationToProfile(userId, location);
         
         if (success) {
-          lastLocationUpdate.current = now;
+          lastLocationUpdate.current = Date.now();
           console.log('✅ Location updated automatically:', {
             latitude: location.latitude,
             longitude: location.longitude,
@@ -70,47 +69,34 @@ export const useAutoLocation = ({
     } finally {
       isUpdating.current = false;
     }
-  };
+  }, [isLocationSharingEnabled, userId, onLocationUpdate, onError]);
 
   useEffect(() => {
-    // Update location when component mounts (app opens)
-    if (isLocationSharingEnabled && userId) {
-      updateUserLocation(true); // Force update on app open
+    // Completely disable auto-location in development mode if configured
+    if (APP_CONFIG.DEVELOPMENT.DISABLE_AUTO_LOCATION) {
+      console.log('🔄 Auto-location disabled in development mode to prevent infinite loops');
+      return;
     }
-  }, [isLocationSharingEnabled, userId]);
 
-  useEffect(() => {
-    // Handle app state changes (foreground/background)
-    let timeoutId: ReturnType<typeof setTimeout>;
-    
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        // App has come to the foreground - debounce the location update
-        console.log('📱 App came to foreground, scheduling location update...');
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          updateUserLocation(true); // Force update when app becomes active
-        }, 2000); // 2 second delay to prevent rapid updates
-      }
+    // Only update location once when component mounts and user is available
+    if (isLocationSharingEnabled && userId && !hasInitialized.current && LOCATION_CONFIG.ENABLE_AUTO_START_LOCATION) {
+      hasInitialized.current = true;
+      // Add a delay to prevent immediate location request on app start
+      const initTimeout = setTimeout(() => {
+        updateUserLocation(true, 'normal');
+      }, getLocationUpdateDelay('initial'));
+      
+      return () => clearTimeout(initTimeout);
+    }
+  }, [isLocationSharingEnabled, userId, updateUserLocation]);
 
-      appState.current = nextAppState;
-    };
+  // Removed duplicate AppState listener to prevent conflicts with AuthContext
+  // Location updates will now be handled through manual triggers and the initial mount
 
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    return () => {
-      subscription?.remove();
-      clearTimeout(timeoutId);
-    };
-  }, [isLocationSharingEnabled, userId]);
-
-  // Manual location update function
-  const manualLocationUpdate = () => {
-    updateUserLocation(true);
-  };
+  // Manual location update function - now memoized to prevent recreation
+  const manualLocationUpdate = useCallback(() => {
+    updateUserLocation(true, 'normal');
+  }, [updateUserLocation]);
 
   return {
     manualLocationUpdate,

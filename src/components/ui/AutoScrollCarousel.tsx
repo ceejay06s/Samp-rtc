@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { APP_CONFIG } from '../../utils/appConfig';
 import { getResponsiveSpacing } from '../../utils/responsive';
 import { useTheme } from '../../utils/themes';
 
@@ -18,7 +19,7 @@ interface AutoScrollCarouselProps {
 
 export const AutoScrollCarousel: React.FC<AutoScrollCarouselProps> = ({
   items,
-  autoScrollInterval = 3000,
+  autoScrollInterval = 8000, // Increased from 3000ms to 8000ms (8 seconds) to prevent excessive reloading
   showIndicators = true,
   height = 200,
   style,
@@ -28,19 +29,27 @@ export const AutoScrollCarousel: React.FC<AutoScrollCarouselProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const autoScrollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const currentIndexRef = useRef(0); // Use ref to avoid dependency issues
 
-  // Auto-scroll effect
+  // Auto-scroll effect - fixed infinite loop
   useEffect(() => {
+    // Completely disable auto-scroll in development mode if configured
+    if (APP_CONFIG.DEVELOPMENT.DISABLE_AUTO_SCROLL) {
+      console.log('🔄 Auto-scroll disabled in development mode');
+      return;
+    }
+
     if (items.length <= 1) return;
 
     const startAutoScroll = () => {
       autoScrollTimer.current = setInterval(() => {
         if (flatListRef.current) {
-          const nextIndex = (currentIndex + 1) % items.length;
+          const nextIndex = (currentIndexRef.current + 1) % items.length;
           flatListRef.current.scrollToIndex({
             index: nextIndex,
             animated: true,
           });
+          currentIndexRef.current = nextIndex;
           setCurrentIndex(nextIndex);
         }
       }, autoScrollInterval);
@@ -51,9 +60,15 @@ export const AutoScrollCarousel: React.FC<AutoScrollCarouselProps> = ({
     return () => {
       if (autoScrollTimer.current) {
         clearInterval(autoScrollTimer.current);
+        autoScrollTimer.current = null;
       }
     };
-  }, [currentIndex, autoScrollInterval, items.length]);
+  }, [autoScrollInterval, items.length]); // Removed currentIndex to prevent infinite loop
+
+  // Update ref when currentIndex changes
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   // Handle scroll events
   const handleScroll = (event: any) => {

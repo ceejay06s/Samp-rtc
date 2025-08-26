@@ -47,7 +47,7 @@ function RootLayoutContent() {
             <Stack.Screen name="menu" />
             <Stack.Screen name="preferences" />
             <Stack.Screen name="user-profile" />
-            <Stack.Screen name="chat" />
+            <Stack.Screen name="chat/[id]" />
             <Stack.Screen name="session-test" />
           </Stack>
           
@@ -93,11 +93,16 @@ const styles = StyleSheet.create({
     }),
   },
   sidebar: {
+    // Remove fixed width to allow DesktopSidebar to control its own width
     zIndex: 1000,
+    backgroundColor: '#ffffff',
+    borderRightWidth: 1,
+    borderRightColor: '#e0e0e0',
     // Web-specific styles
     ...(Platform.OS === 'web' && {
       position: 'relative',
       flexShrink: 0,
+      boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
     }),
   },
   content: {

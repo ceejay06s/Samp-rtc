@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
+import { supabase } from '../lib/supabase';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { DatePicker } from '../src/components/ui/DatePicker';
@@ -115,16 +116,32 @@ export default function ProfileScreen() {
     
     try {
       setLoading(true);
+      console.log('🔍 Loading profile from database for user:', user.id);
       
-      // Try to refresh profile from context
-      await refreshProfile();
+      // Fetch profile directly from Supabase
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
       
-      // If still no profile, create a default one
-      if (!currentProfile) {
-        const defaultProfile: Partial<Profile> = {
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 is "no rows returned", which is okay for new users
+        console.error('❌ Error fetching profile:', error);
+        throw error;
+      }
+      
+      if (profileData) {
+        console.log('✅ Profile found in database:', profileData);
+        setProfile(profileData);
+        loadProfileData(profileData);
+      } else {
+        console.log('ℹ️ No profile found, creating default profile');
+        // Create a new profile in the database
+        const defaultProfile = {
           user_id: user.id,
-          first_name: '',
-          last_name: '',
+          first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || '',
+          last_name: user.user_metadata?.last_name || '',
           gender: '',
           bio: '',
           location: '',
@@ -134,29 +151,66 @@ export default function ProfileScreen() {
           min_age: 18,
           max_age: 100,
           photos: [],
+          is_online: true,
         };
         
-        // Set default values in local state
-        setProfile(defaultProfile as Profile);
-        setFirstName('');
-        setLastName('');
-        setBirthdate(undefined);
-        setGender('');
-        setBio('');
-        setLocation('');
-        setInterests([]);
-        setLookingFor([]);
-        setMaxDistance(50);
-        setMinAge(18);
-        setMaxAge(100);
-        setPhotos([]);
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert([defaultProfile])
+          .select()
+          .single();
+        
+        if (createError) {
+          console.error('❌ Error creating profile:', createError);
+          throw createError;
+        }
+        
+        console.log('✅ Profile created:', newProfile);
+        setProfile(newProfile);
+        loadProfileData(newProfile);
       }
+      
+      // Try to refresh profile in context as well
+      try {
+        await refreshProfile();
+      } catch (contextError) {
+        console.log('ℹ️ Context refresh failed, but local profile loaded successfully');
+      }
+      
     } catch (error) {
-      console.error('Failed to load profile from database:', error);
+      console.error('❌ Failed to load profile from database:', error);
       showAlert('Error', 'Failed to load profile from database. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+  
+  const loadProfileData = (profileData: Profile) => {
+    console.log('📋 Loading profile data into form fields');
+    setFirstName(profileData.first_name || '');
+    setLastName(profileData.last_name || '');
+    
+    // Handle birthdate
+    if (profileData.birthdate) {
+      try {
+        const birthDate = new Date(profileData.birthdate + 'T00:00:00');
+        if (!isNaN(birthDate.getTime())) {
+          setBirthdate(birthDate);
+        }
+      } catch (error) {
+        console.error('Error parsing birthdate:', error);
+      }
+    }
+    
+    setGender(profileData.gender || '');
+    setBio(profileData.bio || '');
+    setLocation(profileData.location || '');
+    setInterests(profileData.interests || []);
+    setLookingFor(profileData.looking_for || []);
+    setMaxDistance(profileData.max_distance || 50);
+    setMinAge(profileData.min_age || 18);
+    setMaxAge(profileData.max_age || 100);
+    setPhotos(profileData.photos || []);
   };
 
   const loadProfile = async () => {
@@ -166,38 +220,16 @@ export default function ProfileScreen() {
     
     try {
       setLoading(true);
+      console.log('📋 Loading profile from AuthContext:', currentProfile);
       
       // Set profile state
       setProfile(currentProfile);
       
-      // Set form fields
-      setFirstName(currentProfile.first_name || '');
-      setLastName(currentProfile.last_name || '');
-      
-      // Handle birthdate
-      if (currentProfile.birthdate) {
-        try {
-          const birthDate = new Date(currentProfile.birthdate + 'T00:00:00');
-          if (!isNaN(birthDate.getTime())) {
-            setBirthdate(birthDate);
-          }
-        } catch (error) {
-          console.error('Error parsing birthdate:', error);
-        }
-      }
-      
-      setGender(currentProfile.gender || '');
-      setBio(currentProfile.bio || '');
-      setLocation(currentProfile.location || '');
-      setInterests(currentProfile.interests || []);
-      setLookingFor(currentProfile.looking_for || []);
-      setMaxDistance(currentProfile.max_distance || 50);
-      setMinAge(currentProfile.min_age || 18);
-      setMaxAge(currentProfile.max_age || 100);
-      setPhotos(currentProfile.photos || []);
+      // Load profile data into form fields
+      loadProfileData(currentProfile);
       
     } catch (error) {
-      console.error('Failed to load profile:', error);
+      console.error('❌ Failed to load profile:', error);
       showAlert('Error', 'Failed to load profile. Please try again.');
     } finally {
       setLoading(false);
@@ -248,6 +280,7 @@ export default function ProfileScreen() {
 
     try {
       setSaving(true);
+      console.log('💾 Saving profile for user:', user.id);
       
       const profileData = {
         first_name: firstName.trim(),
@@ -262,14 +295,43 @@ export default function ProfileScreen() {
         min_age: minAge,
         max_age: maxAge,
         photos,
+        updated_at: new Date().toISOString(),
       };
 
-      await AuthService.updateProfile(user.id, profileData);
-      await refreshProfile();
+      // Save directly to Supabase
+      const { data: updatedProfile, error } = await supabase
+        .from('profiles')
+        .upsert([{ ...profileData, user_id: user.id }])
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('❌ Error saving profile to database:', error);
+        throw error;
+      }
+      
+      console.log('✅ Profile saved to database:', updatedProfile);
+      setProfile(updatedProfile);
+      
+      // Also try AuthService for backwards compatibility
+      try {
+        await AuthService.updateProfile(user.id, profileData);
+        console.log('✅ Profile updated via AuthService');
+      } catch (authServiceError) {
+        console.log('ℹ️ AuthService update failed, but direct Supabase update succeeded');
+      }
+      
+      // Refresh profile in context
+      try {
+        await refreshProfile();
+        console.log('✅ Profile context refreshed');
+      } catch (contextError) {
+        console.log('ℹ️ Context refresh failed, but profile saved successfully');
+      }
       
       showAlert('Success', 'Profile updated successfully!');
     } catch (error) {
-      console.error('Failed to save profile:', error);
+      console.error('❌ Failed to save profile:', error);
       showAlert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
@@ -330,11 +392,26 @@ export default function ProfileScreen() {
         const newPhotos = [...photos, result.url];
         setPhotos(newPhotos);
         
-        // Save to profile immediately
-        await AuthService.updateProfile(user.id, { photos: newPhotos });
+        // Save to profile immediately in Supabase
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ photos: newPhotos, updated_at: new Date().toISOString() })
+          .eq('user_id', user.id);
+        
+        if (updateError) {
+          console.error('❌ Failed to update photos in database:', updateError);
+          // Try AuthService as fallback
+          await AuthService.updateProfile(user.id, { photos: newPhotos });
+        } else {
+          console.log('✅ Photos updated in database');
+        }
         
         // Refresh profile in context
-        await refreshProfile();
+        try {
+          await refreshProfile();
+        } catch (contextError) {
+          console.log('ℹ️ Context refresh failed, but photos updated successfully');
+        }
         
         // Show success message
         showAlert('Success', 'Photo uploaded successfully!');
@@ -389,11 +466,26 @@ export default function ProfileScreen() {
           const newPhotos = [...photos, uploadResult.url];
           setPhotos(newPhotos);
           
-          // Save to profile immediately
-          await AuthService.updateProfile(user.id, { photos: newPhotos });
+          // Save to profile immediately in Supabase
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ photos: newPhotos, updated_at: new Date().toISOString() })
+            .eq('user_id', user.id);
+          
+          if (updateError) {
+            console.error('❌ Failed to update photos in database:', updateError);
+            // Try AuthService as fallback
+            await AuthService.updateProfile(user.id, { photos: newPhotos });
+          } else {
+            console.log('✅ Photos updated in database');
+          }
           
           // Refresh profile in context
-          await refreshProfile();
+          try {
+            await refreshProfile();
+          } catch (contextError) {
+            console.log('ℹ️ Context refresh failed, but photos updated successfully');
+          }
           
           // Show success message
           showAlert('Success', 'Photo uploaded successfully!');
@@ -449,11 +541,26 @@ export default function ProfileScreen() {
           const newPhotos = [...photos, uploadResult.url];
           setPhotos(newPhotos);
           
-          // Save to profile immediately
-          await AuthService.updateProfile(user.id, { photos: newPhotos });
+          // Save to profile immediately in Supabase
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ photos: newPhotos, updated_at: new Date().toISOString() })
+            .eq('user_id', user.id);
+          
+          if (updateError) {
+            console.error('❌ Failed to update photos in database:', updateError);
+            // Try AuthService as fallback
+            await AuthService.updateProfile(user.id, { photos: newPhotos });
+          } else {
+            console.log('✅ Photos updated in database');
+          }
           
           // Refresh profile in context
-          await refreshProfile();
+          try {
+            await refreshProfile();
+          } catch (contextError) {
+            console.log('ℹ️ Context refresh failed, but photos updated successfully');
+          }
           
           // Show success message
           showAlert('Success', 'Photo taken and uploaded successfully!');
@@ -499,10 +606,27 @@ export default function ProfileScreen() {
             try {
               const updatedPhotos = photos.filter((_, i) => i !== index);
               setPhotos(updatedPhotos);
-              await AuthService.updateProfile(user.id, { photos: updatedPhotos });
+              
+              // Update in Supabase
+              const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ photos: updatedPhotos, updated_at: new Date().toISOString() })
+                .eq('user_id', user.id);
+              
+              if (updateError) {
+                console.error('❌ Failed to update photos in database:', updateError);
+                // Try AuthService as fallback
+                await AuthService.updateProfile(user.id, { photos: updatedPhotos });
+              } else {
+                console.log('✅ Photos updated in database');
+              }
               
               // Refresh profile in context to ensure UI updates
-              await refreshProfile();
+              try {
+                await refreshProfile();
+              } catch (contextError) {
+                console.log('ℹ️ Context refresh failed, but photo removed successfully');
+              }
               
               showAlert('Success', 'Photo removed successfully!');
             } catch (error) {
@@ -524,10 +648,27 @@ export default function ProfileScreen() {
                 try {
                   const updatedPhotos = photos.filter((_, i) => i !== index);
                   setPhotos(updatedPhotos);
-                  await AuthService.updateProfile(user.id, { photos: updatedPhotos });
+                  
+                  // Update in Supabase
+                  const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({ photos: updatedPhotos, updated_at: new Date().toISOString() })
+                    .eq('user_id', user.id);
+                  
+                  if (updateError) {
+                    console.error('❌ Failed to update photos in database:', updateError);
+                    // Try AuthService as fallback
+                    await AuthService.updateProfile(user.id, { photos: updatedPhotos });
+                  } else {
+                    console.log('✅ Photos updated in database');
+                  }
                   
                   // Refresh profile in context to ensure UI updates
-                  await refreshProfile();
+                  try {
+                    await refreshProfile();
+                  } catch (contextError) {
+                    console.log('ℹ️ Context refresh failed, but photo removed successfully');
+                  }
                   
                   showAlert('Success', 'Photo removed successfully!');
                 } catch (error) {

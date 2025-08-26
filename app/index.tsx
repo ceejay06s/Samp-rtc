@@ -1,23 +1,53 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../lib/AuthContext';
 import { useTheme } from '../src/utils/themes';
 
 export default function IndexScreen() {
   const theme = useTheme();
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, authStateStable } = useAuth();
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
-      if (isAuthenticated && user) {
-        router.replace('/dashboard');
-      } else {
-        router.replace('/welcome');
+    if (!loading && !hasRedirected) {
+      console.log('🔄 IndexScreen: Auth state changed', {
+        loading,
+        isAuthenticated,
+        hasUser: !!user,
+        userId: user?.id,
+        userEmail: user?.email,
+        authStateStable
+      });
+      
+      // Wait for auth state to be stable before redirecting
+      if (!authStateStable) {
+        console.log('⏳ IndexScreen: Auth state not stable yet, waiting...');
+        return;
+      }
+      
+      if (isAuthenticated && user && user.id) {
+        console.log('✅ IndexScreen: User authenticated, redirecting to dashboard');
+        setHasRedirected(true);
+        // Add a small delay to ensure state is properly propagated
+        setTimeout(() => {
+          router.replace('/dashboard');
+        }, 100);
+      } else if (!isAuthenticated || !user) {
+        console.log('🚫 IndexScreen: No user, redirecting to welcome');
+        setHasRedirected(true);
+        setTimeout(() => {
+          router.replace('/welcome');
+        }, 100);
       }
     }
-  }, [isAuthenticated, loading, user]);
+  }, [isAuthenticated, loading, user, hasRedirected, authStateStable]);
+
+  // Prevent multiple redirects
+  if (hasRedirected) {
+    return null;
+  }
 
   if (loading) {
     return (

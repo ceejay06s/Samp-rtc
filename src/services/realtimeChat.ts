@@ -1,3 +1,4 @@
+import { config } from '../../lib/config';
 import { supabase } from '../../lib/supabase';
 import { Message, MessageType } from '../types';
 import { AudioUploadService } from './audioUploadService';
@@ -128,6 +129,9 @@ export class RealtimeChatService {
           updated_at: new Date().toISOString(),
         })
         .eq('id', conversationId);
+
+      // Send notification to the other user in the conversation
+      await this.sendMessageNotification(conversationId, user.id, caption || '', MessageType.PHOTO);
 
       // Map and return the message
       const message = this.mapMessagePayload(messageData);
@@ -326,6 +330,9 @@ export class RealtimeChatService {
         })
         .eq('id', conversationId);
 
+      // Send notification to the other user in the conversation
+      await this.sendMessageNotification(conversationId, user.id, content, messageType);
+
       // Map and return the message
       const message = this.mapMessagePayload(messageData);
       console.log('✅ Message sent successfully:', message.id);
@@ -334,6 +341,152 @@ export class RealtimeChatService {
     } catch (error) {
       console.error('❌ Failed to send message:', error);
       throw new Error(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Send notification for new message
+  private async sendMessageNotification(
+    conversationId: string,
+    senderId: string,
+    content: string,
+    messageType: MessageType
+  ): Promise<void> {
+    try {
+      // Get conversation and match information
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select(`
+          id,
+          match:matches!conversations_match_id_fkey(id, user1_id, user2_id)
+        `)
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation?.match) {
+        console.warn('⚠️ Could not get conversation for notification:', convError);
+        return;
+      }
+
+      const match = Array.isArray(conversation.match) ? conversation.match[0] : conversation.match;
+      
+      // Determine recipient (the other user in the match)
+      const recipientId = match.user1_id === senderId ? match.user2_id : match.user1_id;
+      
+      // Get sender's profile
+      const { data: senderProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('user_id', senderId)
+        .single();
+
+      if (profileError) {
+        console.warn('⚠️ Could not get sender profile for notification:', profileError);
+        return;
+      }
+
+      // Prepare notification content
+      let notificationBody = '';
+      switch (messageType) {
+        case MessageType.TEXT:
+          notificationBody = `${senderProfile?.first_name || 'Someone'}: ${content.length > 50 ? content.substring(0, 47) + '...' : content}`;
+          break;
+        case MessageType.PHOTO:
+          notificationBody = `${senderProfile?.first_name || 'Someone'} sent you a photo`;
+          break;
+        case MessageType.VOICE:
+          notificationBody = `${senderProfile?.first_name || 'Someone'} sent you a voice message`;
+          break;
+        case MessageType.GIF:
+          notificationBody = `${senderProfile?.first_name || 'Someone'} sent you a GIF`;
+          break;
+        case MessageType.STICKER:
+          notificationBody = `${senderProfile?.first_name || 'Someone'} sent you a sticker`;
+          break;
+        default:
+          notificationBody = `${senderProfile?.first_name || 'Someone'} sent you a message`;
+      }
+
+      // Check if recipient has notifications enabled
+      const { data: preferences, error: prefError } = await supabase
+        .from('notification_preferences')
+        .select('message_notifications, push_enabled')
+        .eq('user_id', recipientId)
+        .single();
+
+      if (prefError || !preferences?.message_notifications || !preferences?.push_enabled) {
+        console.log('ℹ️ Recipient has notifications disabled or preferences not found');
+        return;
+      }
+
+      // Create notification record
+      const { error: notifError } = await supabase
+        .from('notification_history')
+        .insert({
+          user_id: recipientId,
+          title: 'New Message',
+          body: notificationBody,
+          data: {
+            type: 'message',
+            conversationId,
+            senderId,
+            senderName: senderProfile?.first_name || 'Unknown',
+            messageType,
+            timestamp: new Date().toISOString()
+          },
+          notification_type: 'message',
+          status: 'sent'
+        });
+
+      if (notifError) {
+        console.warn('⚠️ Could not create notification record:', notifError);
+        return;
+      }
+
+      // Send push notification via edge function
+      try {
+        console.log('📤 Attempting to send push notification to user:', recipientId);
+        
+        const response = await fetch(
+          `${config.supabase.url}/functions/v1/send-push-notification`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.supabase.anonKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userIds: [recipientId],
+              title: 'New Message',
+              body: notificationBody,
+              data: {
+                type: 'message',
+                conversationId,
+                senderId,
+                senderName: senderProfile?.first_name || 'Unknown',
+                messageType,
+                timestamp: new Date().toISOString()
+              },
+              notificationType: 'message',
+            }),
+          }
+        );
+
+        console.log('📡 Push notification response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn('⚠️ Push notification failed:', response.status, errorText);
+        } else {
+          const result = await response.json();
+          console.log('✅ Push notification sent successfully:', result);
+        }
+      } catch (pushError) {
+        console.error('❌ Error sending push notification:', pushError);
+      }
+
+    } catch (error) {
+      console.error('❌ Error sending message notification:', error);
+      // Don't throw here - notification failure shouldn't break message sending
     }
   }
 

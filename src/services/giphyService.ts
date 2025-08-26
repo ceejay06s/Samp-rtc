@@ -1,5 +1,7 @@
+import { config } from '../../lib/config';
+
 // Giphy API service for GIF search and trending GIFs
-const GIPHY_API_KEY = process.env.EXPO_PUBLIC_GIPHY_API_KEY || 'your-giphy-api-key';
+const GIPHY_API_KEY = config.api.giphyKey || 'your-giphy-api-key';
 const GIPHY_BASE_URL = 'https://api.giphy.com/v1/gifs';
 
 export interface GiphyGif {

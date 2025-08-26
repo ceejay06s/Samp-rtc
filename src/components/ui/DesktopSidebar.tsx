@@ -28,12 +28,21 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
   const [widthAnim] = useState(new Animated.Value(240));
   const [opacityAnim] = useState(new Animated.Value(1));
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [currentWidth, setCurrentWidth] = useState(240); // Track current width for debugging
 
   // Ensure animations are properly initialized
   useEffect(() => {
     widthAnim.setValue(240);
     opacityAnim.setValue(1);
   }, []);
+
+  // Listen to width animation changes for debugging
+  useEffect(() => {
+    const listener = widthAnim.addListener(({ value }) => {
+      setCurrentWidth(value);
+    });
+    return () => widthAnim.removeListener(listener);
+  }, [widthAnim]);
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -78,6 +87,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
 
   const handleToggleCollapse = () => {
     const newCollapsed = !isCollapsed;
+    console.log('🔄 Toggle collapse:', { current: isCollapsed, new: newCollapsed });
     
     Animated.parallel([
       Animated.timing(widthAnim, {
@@ -93,6 +103,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
     ]).start();
     
     setIsCollapsed(newCollapsed);
+    console.log('✅ Collapse state updated:', newCollapsed);
   };
 
   const handleSignOut = async () => {
@@ -160,7 +171,7 @@ export const DesktopSidebar: React.FC<DesktopSidebarProps> = ({ style }) => {
           onPress={handleToggleCollapse}
         >
           <MaterialIcon
-            name={isCollapsed ? IconNames.forward : IconNames.back}
+            name={isCollapsed ? 'arrow-forward' : 'arrow-back'}
             size={isCollapsed ? 16 : 20}
             color={currentColors.textSecondary}
           />

@@ -1,58 +1,72 @@
-// Environment Configuration
+// Direct configuration - no environment variables needed
 export const config = {
   // Supabase
   supabase: {
-    url: process.env.EXPO_PUBLIC_SUPABASE_URL!,
-    anonKey: process.env.EXPO_PUBLIC_SUPABASE_KEY!,
+    url: 'https://xbcrxnebziipzqoorkti.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhiY3J4bmViemlpcHpxb29ya3RpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzMTQyNTYsImV4cCI6MjA2Nzg5MDI1Nn0.oAETtcpGaNvvF-MWxN5zwIqJEwaW4u8XRbDu3BIfQ5g',
   },
   
   // App
   app: {
-    name: process.env.EXPO_PUBLIC_APP_NAME || 'Samp-rtc',
-    version: process.env.EXPO_PUBLIC_APP_VERSION || '1.0.0',
+    name: 'Samp-rtc',
+    version: '1.0.0',
   },
   
   // API
   api: {
-    key: process.env.EXPO_PUBLIC_API_KEY,
+    key: 'iIFhwGAtOcaX3V20SXhH21t8uogfbXPaJTkfU_8Z',
+    giphyKey: 'K561QAO7slfK8l7zgjVLLCP6b5Fg9Wki', // Add your Giphy API key here
+    // VAPID keys for Web Push API
+    vapidPublicKey: 'BGt6PrOD5VwzZBM9HnMKSjLwHD8yrakP8ggYIJ1NhBJfSyPlRLXRFCCobSMMq_6b4EwbPozBJKMae290A_24ETA',
+    vapidPrivateKey: 'AlpuiVhGe2n7w0kc66-0lcjkhVk9yZP-BAMPS5wpRis',
   },
   
   // Features
   features: {
-    analytics: process.env.EXPO_PUBLIC_ENABLE_ANALYTICS === 'true',
-    crashReporting: process.env.EXPO_PUBLIC_ENABLE_CRASH_REPORTING === 'true',
+    analytics: true,
+    crashReporting: true,
   },
 
   // GitHub OAuth
   github: {
-    clientId: process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID || '',
-    clientSecret: process.env.EXPO_PUBLIC_GITHUB_CLIENT_SECRET || '',
+    clientId: 'Iv23liABAmA48tYeKc5K',
+    clientSecret: 'ec4623e809a88e7c95656f9ad0074051f849fb90',
     redirectUri: 'samp-rtc://localhost:3000/auth/callback',
   },
-} as const
+} as const;
 
-// Validation function to ensure required env vars are set
+// Validation function to ensure required config values are set
 export function validateConfig() {
-  const requiredVars = [
-    'EXPO_PUBLIC_SUPABASE_URL',
-    'EXPO_PUBLIC_SUPABASE_KEY',
-  ]
-
-  const missing = requiredVars.filter(varName => !process.env[varName])
-  
-  if (missing.length > 0) {
+  if (!config.supabase.url || !config.supabase.anonKey) {
     throw new Error(
-      `Missing required environment variables: ${missing.join(', ')}\n` +
-      'Please check your .env file and ensure all required variables are set.'
-    )
+      'Supabase configuration is missing. Please check your config file.'
+    );
   }
+  return true;
 }
 
-// Helper function to get environment variable with fallback
+// Helper function for backward compatibility
 export function getEnvVar(key: string, fallback?: string): string {
-  const value = process.env[key]
-  if (!value && fallback === undefined) {
-    throw new Error(`Environment variable ${key} is required but not set`)
+  // Map environment variable names to config values
+  const configMap: Record<string, string> = {
+    'EXPO_PUBLIC_SUPABASE_URL': config.supabase.url,
+    'EXPO_PUBLIC_SUPABASE_KEY': config.supabase.anonKey,
+    'EXPO_PUBLIC_SUPABASE_ANON_KEY': config.supabase.anonKey,
+    'EXPO_PUBLIC_APP_NAME': config.app.name,
+    'EXPO_PUBLIC_APP_VERSION': config.app.version,
+    'EXPO_PUBLIC_API_KEY': config.api.key,
+    'EXPO_PUBLIC_ENABLE_ANALYTICS': config.features.analytics.toString(),
+    'EXPO_PUBLIC_ENABLE_CRASH_REPORTING': config.features.crashReporting.toString(),
+  };
+  
+  const value = configMap[key];
+  if (value !== undefined) {
+    return value;
   }
-  return value || fallback!
-} 
+  
+  if (fallback !== undefined) {
+    return fallback;
+  }
+  
+  throw new Error(`Configuration value for ${key} is not set`);
+}
